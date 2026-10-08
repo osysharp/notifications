@@ -1,0 +1,89 @@
+// THE BELL ON SCREEN — driven as a person uses it: the count, the list with read and unread, opening one, marking all
+// read, the empty states, and their own preferences — wide and on a phone. `osy test --pixels` photographs each
+// (`Ui.Shot`); Docs/OsySharp/design/notifications/ keeps them.
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+/// Three things for Bo: a request for a read, a mention, and a second request about the same draft (it joins the first).
+void BosDay() {
+  runas (Ada) {
+    new Draft { Title = "Autumn lookbook — copy for the cover", Writer = Person.Single(p => p.Email == "ada@studio.test") };
+    UnitOfWork.Commit();
+  }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  runas (Cy) { MentionInAComment(DraftNamed("Autumn lookbook — copy for the cover"), PersonAt("bo@studio.test")); }
+  runas (Cy) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+}
+
+[Test(Studio)]
+void the_bell_counts_what_is_unread_and_its_list_opens_where_it_happened() {
+  BosDay();
+  Ui.Viewport(1440, 900);
+  Ui.SignInAs(Bo);
+  Ui.Visit("/");
+  // The count is in the bell's NAME — "Notifications, 2 new" is what a screen reader says and what a test presses.
+  Ui.Click("Notifications, 2 new");
+  Assert.Visible("Cy Holm mentioned you.", within: "Notification list");
+  Assert.Visible("Cy Holm asked you to read a draft.", within: "Notification list");
+  Assert.Visible("2 times", within: "Notification list");
+  Assert.Visible("Unread · 2");
+  Ui.Shot("bell-open-wide-light");
+  Ui.Theme("dark");
+  Ui.Shot("bell-open-wide-dark");
+  Ui.Theme("light");
+
+  // Opening one: it is read, the bell closes, and the draft is open.
+  Ui.Click("Cy Holm mentioned you. “Autumn lookbook — copy for the cover”");
+  Assert.Visible("Autumn lookbook — copy for the cover");
+  runas (Bo) { Assert.Equal(1, UnreadNotifications()); }
+
+  // Mark all read: the count goes, the list keeps them, and Unread says all is caught up.
+  Ui.Click("Notifications, 1 new");
+  Ui.Click("Mark all read");
+  Assert.Hidden("Mark all read");
+  Assert.Hidden("Unread · 1");
+  runas (Bo) { Assert.Equal(0, UnreadNotifications()); }
+  Assert.Visible("Cy Holm asked you to read a draft.", within: "Notification list");
+  Ui.Click("Unread");
+  Assert.Visible("You are all caught up");
+  Ui.Shot("bell-caught-up-wide-light");
+}
+
+[Test(Studio)]
+void the_bell_with_nothing_in_it_says_what_will_appear_there() {
+  Ui.Viewport(1440, 900);
+  Ui.SignInAs(Cy);
+  Ui.Visit("/");
+  Ui.Click("Notifications");
+  Assert.Visible("Nothing here yet");
+  Ui.Shot("bell-empty-wide-light");
+}
+
+[Test(Studio)]
+void on_a_phone_the_list_is_a_sheet_from_the_bottom() {
+  BosDay();
+  Ui.Viewport(390, 844);
+  Ui.SignInAs(Bo);
+  Ui.Visit("/");
+  Ui.Click("Notifications, 2 new");
+  Assert.Visible("Cy Holm mentioned you.", within: "Notification list");
+  Ui.Shot("bell-open-phone-light");
+  Ui.Theme("dark");
+  Ui.Shot("bell-open-phone-dark");
+}
+
+[Test(Studio)]
+void each_person_chooses_what_is_mailed_to_them() {
+  Ui.Viewport(1440, 900);
+  Ui.SignInAs(Bo);
+  Ui.Visit("/settings/notifications");
+  Assert.Visible("Mail me");
+  Ui.Shot("preferences-wide-light");
+  Ui.Select("Mail me", NotificationMail.Daily);
+  Ui.Click("Save");
+  Assert.Visible("Your notification preferences are saved.");
+  runas (Bo) { Assert.Equal(NotificationMail.Daily, NotificationPreferences.Single().Mail); }
+  runas (Cy) { Assert.Equal(0, NotificationPreferences.Count()); }
+}

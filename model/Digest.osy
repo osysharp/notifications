@@ -1,0 +1,211 @@
+namespace Osysharp.Notifications;
+
+using Osysharp.Identity;
+using Osysharp.Workflow;
+using Osysharp.Mail;
+using Osysharp.EmailTemplates;
+using Osysharp.Clock;
+
+// ── the hourly sweep: the daily digest, and keeping no notification longer than it is needed ──────────────────────────
+
+/// Where the sweep stands. ⚠ Appended, never inserted.
+public enum NotificationWatchState {
+  [Label("Sweeping hourly")] Watching,
+  [Label("Stopped")] Stopped,
+}
+
+/// The one row the sweep runs on — made by the first delivery. Nobody writes it but the kit; whoever has a bell may see
+/// that the sweep runs.
+public entity NotificationWatch {
+  NotificationWatchState State;
+  security {
+    allow read when ReceivesNotifications;
+    deny create;
+    deny update;
+    deny delete;
+  }
+}
+
+/// Every hour: each person due their daily digest gets it, and notifications past their time are deleted.
+public workflow NotificationSweep {
+  Tracks    = NotificationWatch.State;
+  Autostart = true;
+  Initial   = Watching;
+
+  event Stop();
+
+  state Watching {
+    subscribe Stop() as Stopping {
+      Finished {
+        Within = TimeSpan.FromDays(36500);
+        Remind Sweep(After = TimeSpan.FromHours(1), ThenEvery = TimeSpan.FromHours(1)) { SweepNotifications(DateTime.UtcNow); }
+        Unfinished { }
+      }
+    }
+    on Stopping() { goto Stopped; }
+  }
+  terminal cancel Stopped { }
+}
+
+/// One sweep at `now`: the digests that are due, then the purge. Each person's digest is its own try — one mail that
+/// cannot be written does not keep the others from going.
+void SweepNotifications(DateTime now) {
+  SendDigests(now);
+  PurgeNotifications(now);
+}
+
+/// Mail each person due one the unread notifications they have not been mailed — once a day, from `DigestHour` on the
+/// app's clock (`Osysharp.Clock`): the team's morning, wherever the server is, and in summer time as in winter.
+/// Answers how many digests went.
+int SendDigests(DateTime now) {
+  var setup = App.Setting<NotificationsSetup>();
+  var clock = TheClock();
+  var local = clock.Local(now);
+  if (local.Hour < setup.DigestHour) { return 0; }
+  var today = clock.DayOf(now);
+  var sent = 0;
+  var waiting = Notification.Where(n => n.Visible && !n.Lost && n.ReadAt == null && n.MailedAt == null).Include(n => n.Recipient).ToList();
+  List<Guid> asked = [];
+  foreach (var w in waiting) {
+    var person = w.Recipient;
+    if (asked.Contains(person.Id)) { continue; }
+    asked.Add(person.Id);
+    if (!person.IsActive || MailOf(person) == NotificationMail.Off) { continue; }
+    var mine = NotificationPreferences.FirstOrDefault(p => p.Person == person);
+    // One a day — a day on the team's wall, so a digest at 07:00 in Stockholm is not sent again at 02:00 UTC.
+    if (mine != null && mine.LastDigestAt != null && clock.DayOf(mine.LastDigestAt.Value) == today) { continue; }
+    // Only what they may still read — asked again now, as a mail outlives the moment it was delivered: all of theirs
+    // at once, one read per kind of record.
+    var theirs = waiting.Where(x => x.Recipient.Id == person.Id).OrderByDescending(x => x.At).ToList();
+    var readable = Records.Readable(person, theirs.Where(x => x.About != null).Select(x => x.About).ToList()).Select(r => r.Id).ToList();
+    var items = theirs.Where(x => x.About != null && readable.Contains(x.About.Id)).ToList();
+    if (items.Count == 0) { continue; }
+    try {
+      MailNotifications(person, items, true);
+      if (mine == null) { mine = new NotificationPreferences { Person = person }; }
+      mine.LastDigestAt = now;
+      sent = sent + 1;
+    } catch (Exception ex) {
+      // One person's mail that cannot be written keeps nobody else's from going; it is tried again next hour.
+      Log.Warning("The notification digest for " + person.Id.ToString() + " could not be written: " + ex.Message);
+    }
+  }
+  return sent;
+}
+
+/// Delete what is no longer needed: a read notification after `KeepRead`, an unread one after `KeepUnread`, and one
+/// never shown (withheld, or joined to another) after a day. Answers how many went.
+int PurgeNotifications(DateTime now) {
+  var setup = App.Setting<NotificationsSetup>();
+  var readBefore = now - setup.KeepRead;
+  var unreadBefore = now - setup.KeepUnread;
+  var unshownBefore = now - TimeSpan.FromDays(1);
+  var gone = Notification.Where(n => (n.ReadAt != null && n.ReadAt < readBefore)
+                                     || (n.ReadAt == null && n.At < unreadBefore)
+                                     || ((n.State == NotificationState.Withheld || n.State == NotificationState.Merged) && n.At < unshownBefore)).ToList();
+  foreach (var n in gone) { n.Delete(); }
+  return gone.Count;
+}
+
+// ── the mail ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// One line of a notification mail — said in the mail's language, as the mail renders.
+public class NotificationMailLine {
+  public string Sentence = "";
+  public string Title = "";
+  public string Link = "";
+  public DateTime At;
+}
+
+/// Mail `person` the notifications `items` — the daily `digest`, or a single mention — in their language, and mark each
+/// mailed. Through the app's mail (Osysharp.Mail): it goes after the commit, and a mail it already sent is not sent again.
+void MailNotifications(Principal person, List<Notification> items, bool digest) {
+  // Each mail names its recipient's language itself (`language =>`), whoever sends it — the sweep, as the system.
+  var mail = digest ? NotificationDigestMail(person, items) : NotificationMentionMail(person, items[0]);
+  var key = (digest ? "notifications-digest-" : "notifications-mention-") + person.Id.ToString() + "-" + items[0].Id.ToString();
+  SendMail(new MailMessage { To = [person.Email], Subject = mail.Subject, Html = mail.Html, Text = mail.Text }, key);
+  var now = DateTime.UtcNow;
+  foreach (var n in items) { n.MailedAt = now; }
+}
+
+/// The name a notification mail is signed with.
+public string NotificationsAppName() {
+  var name = App.Setting<NotificationsSetup>().AppName;
+  return name == "" ? "your app" : name;
+}
+
+/// An app path as an address a mail can link to; "" stays "".
+string MailLink(string path) {
+  if (path == "") { return ""; }
+  if (path.StartsWith("http://") || path.StartsWith("https://")) { return path; }
+  return App.BaseUrl.TrimEnd('/') + (path.StartsWith("/") ? path : "/" + path);
+}
+
+/// What `items` say, in the language of the mail being rendered.
+List<NotificationMailLine> MailLines(List<Notification> items) {
+  List<NotificationMailLine> lines = [];
+  foreach (var n in items) {
+    var about = n.About;
+    if (about == null) { continue; }
+    lines.Add(new NotificationMailLine { Sentence = SaidOf(n), Title = Records.Title(about),
+                                         Link = MailLink(Records.Link(about)), At = n.At });
+  }
+  return lines;
+}
+
+/// The daily digest: what `person` has not seen, newest first.
+[Email]
+public component NotificationDigestMail(Principal person, List<Notification> items) {
+  language => MailLanguageOf(person);
+  subject => items.Count == 1 ? $"1 thing waiting for you in {NotificationsAppName()}"
+                              : $"{items.Count} things waiting for you in {NotificationsAppName()}";
+  render {
+    EmailLayout(NotificationsAppName(), preview: "What happened while you were away, newest first.",
+                footer: "You get this because you have not read these in the app. Change what is mailed to you under Settings › Notifications.") {
+      EmailHeading("While you were away");
+      EmailText("These are waiting for you. Each one opens where it happened.");
+      foreach (var line in MailLines(items)) {
+        NotificationMailItem(line);
+      }
+      EmailButton("Open " + NotificationsAppName(), MailLink("/"));
+    }
+  }
+}
+
+/// A mention, mailed because it is still unread.
+[Email]
+public component NotificationMentionMail(Principal person, Notification item) {
+  language => MailLanguageOf(person);
+  subject => item.By == null ? $"You were mentioned in {NotificationsAppName()}"
+                             : $"{NotifierName(item.By)} mentioned you in {NotificationsAppName()}";
+  render {
+    EmailLayout(NotificationsAppName(), preview: "You were mentioned, and have not read it yet.",
+                footer: "You get this because you asked for mentions at once. Change it under Settings › Notifications.") {
+      foreach (var line in MailLines([item])) {
+        EmailHeading(line.Sentence);
+        if (line.Title != "") { EmailText(line.Title); }
+        if (line.Link != "") { EmailButton("Open it", line.Link); }
+      }
+    }
+  }
+}
+
+/// One notification in a mail: what happened, on what, when.
+[Email]
+public component NotificationMailItem(NotificationMailLine line) {
+  render {
+    Box(borderTW: 1, border: Colors.Border, pt: 3) {
+      Stack(gap: 1) {
+        Text(line.Sentence, fontSize: FontSize.Subhead, fontWeight: FontWeight.Semibold, color: Colors.OnBg);
+        if (line.Title != "") {
+          if (line.Link != "") {
+            Link(line.Link, text: line.Title, color: Colors.Primary, fontSize: FontSize.Body);
+          } else {
+            Text(line.Title, fontSize: FontSize.Body, color: Colors.TextSecondary);
+          }
+        }
+        Text($"{line.At:d MMM HH:mm} UTC", fontSize: FontSize.Caption, color: Colors.TextMuted);
+      }
+    }
+  }
+}

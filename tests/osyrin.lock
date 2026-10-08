@@ -1,0 +1,92 @@
+{
+  "platform": {
+    "version": "0.9.0"
+  },
+  "entries": [
+    {
+      "name": "Osysharp.Clock",
+      "kind": "package",
+      "version": "0.1.0",
+      "hash": "sha256:f682be329857e698e826c270ebe433ef152a3fb04ffd80d94ee15adc528af962",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:kits/clock",
+      "constraint": "0"
+    },
+    {
+      "name": "Osysharp.Ui",
+      "kind": "package",
+      "version": "2.17.1",
+      "hash": "sha256:17d6d844ed71d4d614d43a6993723da70b2d39241c31e9f9fb58250a5183263c",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:Platform.Core/Dsl/OsySharp/Baseline/Capabilities/Ui"
+    },
+    {
+      "name": "Osysharp.EmailTemplates",
+      "kind": "package",
+      "version": "0.1.1",
+      "hash": "sha256:3ef5eb08590a6772a073aad43e6bae51b31126fb7ea4ce45f09d64d83200527a",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:kits/emailtemplates",
+      "constraint": "0"
+    },
+    {
+      "name": "Osysharp.Identity",
+      "kind": "package",
+      "version": "0.7.0",
+      "hash": "sha256:a8f780ee024fb27a6c1f909feb86fec10c8a176788acd8546d1380a9243575bd",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:kits/identity",
+      "constraint": "0"
+    },
+    {
+      "name": "Osysharp.Mail",
+      "kind": "package",
+      "version": "0.9.0",
+      "hash": "sha256:9d881411b8948aae3c06adeb2ebe9cd828d198e07bef0d5c002c83206ca6e013",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:kits/mail",
+      "constraint": "0"
+    },
+    {
+      "name": "Osysharp.Workflow",
+      "kind": "package",
+      "version": "1.0.0",
+      "hash": "sha256:c9b5bb60a8be44efc0030d73b0bd60bdab05926344a68fb4db29dc78ee94c2f8",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:Platform.Core/Dsl/OsySharp/Baseline/Capabilities/Workflow"
+    },
+    {
+      "name": "Osysharp.Notifications",
+      "kind": "package",
+      "version": "1.0.0",
+      "hash": "sha256:f6a8b15c0d99fb89cb1d0bb72a5ffe2ce8d0cdc89e5424efa3c9afcf0e6017f3",
+      "minPlatform": "0.9.0",
+      "shadow": "app-forkable",
+      "source": "workspace:kits/notifications",
+      "constraint": "1"
+    }
+  ],
+  "bridges": {
+    "searched": [
+      "workspace",
+      "platform",
+      "github"
+    ],
+    "notIncluded": [
+      {
+        "name": "Osysharp.Inbox.Notifications",
+        "reason": "completes Osysharp.Inbox \u002B Osysharp.Notifications, and this app does not use \u0060Osysharp.Inbox\u0060."
+      },
+      {
+        "name": "Osysharp.Privacy.Notifications",
+        "reason": "completes Osysharp.Privacy \u002B Osysharp.Notifications, and this app does not use \u0060Osysharp.Privacy\u0060."
+      }
+    ]
+  }
+}

@@ -1,0 +1,89 @@
+namespace NotificationsKitTests;
+
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using Osysharp.Mail;
+
+// A SMALL STUDIO'S SHARED DRAFTS — the record a notification is about is a `Draft`. Writers read every draft but a
+// private one, which only its writer and the editors read: the case a notifier must never get wrong.
+
+[Role] enum StudioRole { Authenticator, Writer, Editor }
+
+policy IsWriter => RoleGrant.Any(g => g.Member == user && (g.Role == StudioRole.Writer || g.Role == StudioRole.Editor));
+policy IsEditor => RoleGrant.Any(g => g.Member == user && g.Role == StudioRole.Editor);
+/// The kit's question: everybody in the studio has a bell.
+policy ReceivesNotifications => IsWriter;
+/// The editors set the studio's clock — the time zone its mornings, and so its digests, follow.
+policy ManagesClock => IsEditor;
+
+/// A person in the studio, signing in with a code — all a test needs.
+entity Person : Principal {
+  [MaxLength(200)] string CodeHash = "";
+  security {
+    allow read when IsAuthenticated || IsAuthenticator;
+    allow create when IsAuthenticator;
+    deny read CodeHash when !IsAuthenticator;
+  }
+}
+
+/// A draft — public to the studio, or private to its writer and the editors. What a notification calls it, and where it
+/// opens (the draft's page), are its own facts: the kit reads them, the studio writes nothing for it.
+[Title($"“{Title}”")]
+entity Draft {
+  [Required, MaxLength(120)] string Title;
+  [Required] Person Writer;
+  bool Private;
+  security {
+    allow read, create, update when IsWriter where !Private || Writer == user;
+    allow read, create, update when IsWriter && IsEditor;
+    // An editor takes a draft down — and every notification about it goes with it.
+    allow delete when IsEditor;
+  }
+}
+
+app.Notifications = new NotificationsSetup { AppName = "Studio" };
+
+/// Somebody asked for a read of a draft — said in the reader's words, when the notification is read.
+[Event("Read asked")]
+public sealed class ReadAsked {
+  public Draft Draft;
+  public Person? By;
+  public override string Sentence() {
+    var by = By == null ? "Somebody" : (By.DisplayName != "" ? By.DisplayName : By.Email);
+    return $"{by} asked you to read a draft.";
+  }
+}
+
+/// A memo was filed on a draft — an event that says nothing of its own, so it says its label.
+[Event("Memo filed")]
+public sealed class MemoFiled { public Draft Draft; }
+
+/// Ask `to` to read draft `d` — what the studio's "Ask for a read" button does.
+public void AskForARead(Draft d, Person to) {
+  Notify(to, new ReadAsked { Draft = d, By = Session.CurrentUser as Person }, by: Session.CurrentUser);
+  UnitOfWork.Commit();
+}
+
+/// Name `to` in a comment on draft `d` — a mention, in the kit's own words.
+public void MentionInAComment(Draft d, Person to) {
+  Mention(to, d, by: Session.CurrentUser);
+  UnitOfWork.Commit();
+}
+
+[AuthMethod]
+string SignInWithCode(string email, string code) {
+  var p = Person.FirstOrDefault(x => x.Email == NormalisedEmail(email));
+  if (p == null || !p.IsActive) { Security.VerifyPassword(code); return ""; }
+  if (!Security.VerifyPassword(code, p.CodeHash)) { return ""; }
+  return Security.IssueJwt(p.Id, p.Email);
+}
+
+app.AuthBootstrap = new AuthBootstrap { Role = StudioRole.Authenticator, Login = SignInWithCode };
+app.Auth = new PasswordAuth { LoginField = Email, PasswordField = CodeHash };
+app.Audit = new AuditConfig { Redact = new AuditRedaction { Properties = [NotificationsKitTests.Person.CodeHash] } };
+
+// Writers tell each other things from their own requests ("Ask for a read", a mention) — the kit's grant is the app's.
+partial entity Notification { security { allow create when IsWriter; } }
+
+// The tests read what was mailed; nobody in the app does.
+partial entity OutgoingMail { security { allow read when IsEditor; } }

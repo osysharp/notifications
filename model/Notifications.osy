@@ -1,0 +1,292 @@
+namespace Osysharp.Notifications;
+
+using Osysharp.Identity;
+using Osysharp.Workflow;
+
+// ── a notification ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// Where a notification stands. ⚠ Appended, never inserted: an enum is stored by position.
+public enum NotificationState {
+  /// Written; delivered once the commit that wrote it has gone.
+  [Label("Waiting")] Queued,
+  /// In the recipient's bell.
+  [Label("Shown")] Shown,
+  /// In the bell, and mailed if it is still unread when the mention wait is over.
+  [Label("Shown — mail due")] MailDue,
+  /// Never shown — the recipient may not read what it is about, or their account is off.
+  [Label("Not shown")] Withheld,
+  /// Never shown on its own — an unread one about the same thing was already in the bell, and took it.
+  [Label("Joined an unread one")] Merged,
+}
+
+/// Something one person should know: what happened (the event itself), about which record, and whether they have read
+/// it. Written by `Notify`, delivered by `NotificationDelivery`, read in the bell, mailed by the sweep.
+///
+/// SECURITY-INVARIANT(notifications-are-the-recipients-own): a person reads their own notifications and nobody else's —
+/// what a colleague is told is theirs — and changes nothing on one but whether they have read it. A new one is only ever
+/// a request to tell somebody: it starts waiting and unseen, in nobody's bell until the delivery has asked whether its
+/// recipient may read what it is about, and a person can only put their OWN name on one. Guarded by
+/// tests/delivery.test.osy `nobody_reads_or_writes_another_persons_notifications`.
+///
+/// ⚑ THE APP DECIDES WHO TELLS, so this is `Extensible`: the kit's own delivery and sweep write as the system, and a
+///   person's request that tells somebody (a mention as they send a note) needs the app's grant —
+///     `partial entity Notification { security { allow create when IsAgent; } }`
+///   Without one, only the app's workflows and timers tell anybody anything.
+[Authority(Extensible)]
+[Unique(Recipient, OpenKey)]
+public entity Notification {
+  /// Who is told.
+  [Required] Principal Recipient;
+  /// The record it is about — any record the app keeps. Read as the reader: one they may not read reads as nothing,
+  /// and a notification about a record that is deleted goes with it.
+  [Required, OnDelete(Remove)] Entity About;
+  /// What happened — the event's class, by full name ("Studio.DraftReadAsked"); "" for the kit's own mention.
+  [MaxLength(200)] string Kind = "";
+  /// Who did it — none for the app itself (a timer, a rule).
+  Principal? By;
+  /// The event itself, as `Events.Write` keeps it — said with its own `Sentence()` when it is read. Can name people, so
+  /// it is personal data: erased with the recipient's.
+  [Classification(Personal.Content)] string Payload = "";
+  /// A mention — the person was named by somebody, which is what "mail me mentions at once" means.
+  bool Mention;
+  /// What makes two notifications the same thing — one unread at a time per key.
+  [Required, MaxLength(300)] string Key;
+  /// The key while it is unread and in the bell; none once read, withheld or merged — so a later one about the same
+  /// thing is new again.
+  [MaxLength(300)] string? OpenKey;
+  /// How many times it happened while it waited unread.
+  int Times = 1;
+  /// When it (last) happened.
+  DateTime At;
+  /// In the bell — delivered, and about something its recipient may read.
+  bool Visible;
+  /// Out of the bell since — its reader can no longer read what it is about (found as the bell was read).
+  bool Lost;
+  DateTime? ReadAt;
+  DateTime? MailedAt;
+  NotificationState State;                          // no default — NotificationDelivery owns it
+  /// Why it was never shown, or stopped being.
+  [MaxLength(300)] string? Problem;
+  security {
+    // Only what is in their bell: one waiting to be delivered, withheld or joined to another is nobody's to read — its
+    // facts may be about a record the recipient was never allowed to see.
+    allow read when IsAuthenticated where Recipient == user && Visible && !Lost;
+    // Reading it, marking it unread, and its leaving the bell when they lose access are theirs; nothing else is — never
+    // what makes it visible, which is the delivery's decision alone.
+    allow update when IsAuthenticated where Recipient == user && Visible;
+    deny update Recipient, About, Kind, By, Payload, Mention, Key, Times, At, MailedAt, State, Visible;
+    // A new one is a request to tell somebody, decided by the delivery — never shown, read or mailed on arrival — and
+    // nobody signed in puts somebody else's name on it.
+    deny create where Visible || Lost || ReadAt != null || MailedAt != null || OpenKey != null || Times != 1;
+    deny create when IsAuthenticated where By != null && By != user;
+    deny delete;
+  }
+}
+
+// ── telling somebody ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// Write a notification of `e` — what `Notify` and `NotifyAll` do. It is about the record the event is about.
+void TellAbout(Principal to, Event e, Principal? by, bool mention, string key) {
+  if (by != null && by.Id == to.Id) { return; }
+  var about = Events.About(e);
+  if (about == null) {
+    throw new ValidationException($"A notification is about a record, and the event “{Events.Label(e)}” is about none — "
+      + "give the event the record it happened to as its first record member "
+      + "(`public sealed class DraftReadAsked { public Draft Draft; }`).");
+  }
+  var kind = Events.Type(e);
+  new Notification { Recipient = to, About = about!, Kind = kind, Payload = Events.Write(e), By = by, Mention = mention,
+                     Key = key != "" ? key : about!.Id.ToString() + ":" + kind,
+                     At = DateTime.UtcNow };
+}
+
+/// Delivers each notification after the commit that wrote it — once, to somebody who may read what it is about.
+///
+/// ⚑ THE DECISION IS A CLOCK DUE AT ONCE, NOT THE `enter`, for the outbox's reason: an autostarted run's `enter` is part
+///   of the commit that wrote the row, and whether the recipient may read the record must be asked of the record AS
+///   STORED. A throw leaves it Queued, and it is tried again.
+public workflow NotificationDelivery {
+  Tracks    = Notification.State;
+  Autostart = true;
+  Initial   = Queued;
+
+  state Queued {
+    Expire { Within = TimeSpan.Zero; Accrues = false; }
+    on Expire {
+      var decided = Deliver(this.Item);
+      if (decided == NotificationState.Withheld) { goto Withheld; }
+      if (decided == NotificationState.Merged) { goto Merged; }
+      if (decided == NotificationState.MailDue) { goto MailDue; }
+      goto Shown;
+    }
+  }
+
+  // A mention for somebody who asked for mentions at once: mailed if it is still unread when the wait is over.
+  state MailDue {
+    Expire { Within = App.Setting<NotificationsSetup>().MentionMailAfter; Accrues = false; }
+    on Expire {
+      MailIfUnread(this.Item);
+      goto Shown;
+    }
+  }
+
+  terminal success Shown { }
+  terminal cancel Withheld { }
+  terminal cancel Merged { }
+}
+
+/// What becomes of `n` — the decision the delivery makes, written on `n` (and on the unread one it joins).
+NotificationState Deliver(Notification n) {
+  // The hourly sweep runs from the first notification an app ever delivers.
+  if (!NotificationWatch.Any()) { new NotificationWatch(); }
+  if (!n.Recipient.IsActive) {
+    n.Problem = "Their account is switched off.";
+    return NotificationState.Withheld;
+  }
+  // SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read): asked of the record as stored, under the
+  // recipient's own rules (`Records.MayRead`, the record's own security), after the commit that wrote the notification.
+  // A notification that fails it is never shown — not in the bell, not in a mail. Guarded by tests/delivery.test.osy
+  // `a_notification_about_a_record_the_recipient_may_not_read_is_never_shown`.
+  if (!Records.MayRead(n.Recipient, n.About)) {
+    n.Problem = "They may not read what it is about.";
+    return NotificationState.Withheld;
+  }
+  // One unread notification per thing: a second about it joins the first, which moves to the top.
+  var open = Notification.FirstOrDefault(x => x.Recipient == n.Recipient && x.OpenKey == n.Key && x.Id != n.Id);
+  if (open != null) {
+    open.Times = open.Times + 1;
+    if (n.At > open.At) { open.At = n.At; }
+    open.Payload = n.Payload;
+    open.By = n.By;
+    if (n.Mention) { open.Mention = true; }
+    n.Problem = "Joined the unread one about the same thing.";
+    return NotificationState.Merged;
+  }
+  n.Visible = true;
+  n.OpenKey = n.Key;
+  if (n.Mention && MailOf(n.Recipient) == NotificationMail.MentionsAtOnce) { return NotificationState.MailDue; }
+  return NotificationState.Shown;
+}
+
+/// A mention whose wait is over: mailed to its recipient if they have not read it, may still read what it is about,
+/// and still want mentions at once.
+void MailIfUnread(Notification n) {
+  if (!n.Visible || n.Lost || n.ReadAt != null || n.MailedAt != null) { return; }
+  if (MailOf(n.Recipient) != NotificationMail.MentionsAtOnce) { return; }
+  if (!Records.MayRead(n.Recipient, n.About)) { return; }
+  MailNotifications(n.Recipient, [n], false);
+}
+
+// ── the bell ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// One notification as the bell shows it — said in the reader's language.
+public class NotificationLine {
+  public Guid Id;
+  /// "Ines mentioned you."
+  public string Sentence = "";
+  /// "#1042 · Refund not received" — the record as it is now.
+  public string Title = "";
+  /// Where it opens.
+  public string Link = "";
+  /// Who did it, for the avatar — "" for nobody.
+  public string By = "";
+  /// False: the reader may no longer read what it is about — it has left their bell.
+  public bool Readable = true;
+}
+
+/// How many unread notifications the reader has.
+public int UnreadNotifications() {
+  var me = Session.CurrentUser;
+  if (me == null) { return 0; }
+  return Notification.Count(n => n.Recipient == me && n.Visible && n.ReadAt == null);
+}
+
+/// The reader's latest notifications, said in their language — what the bell's list fetches as it opens (one read for
+/// all of them). Each record is read again AS THE READER: one they may no longer read leaves the bell now (`Readable`
+/// false), so a record they lost access to is not even named. The records are read together, one read per kind of
+/// record, however many notifications name them.
+public List<NotificationLine> MyNotificationLines(int take = 40) {
+  var me = Session.CurrentUser;
+  if (me == null) { return []; }
+  RememberLanguage();
+  var mine = Notification.Where(n => n.Recipient == me && n.Visible).OrderByDescending(n => n.At).Take(take).ToList();
+  List<NotificationLine> said = [];
+  foreach (var n in mine) {
+    said.Add(LineOf(n));
+  }
+  UnitOfWork.Commit();
+  return said;
+}
+
+/// One notification's line — for a row that arrived after the list opened.
+public NotificationLine? NotificationLineOf(Guid id) {
+  var me = Session.CurrentUser;
+  if (me == null) { return null; }
+  var n = Notification.FirstOrDefault(x => x.Id == id && x.Recipient == me);
+  if (n == null) { return null; }
+  var line = LineOf(n);
+  UnitOfWork.Commit();
+  return line;
+}
+
+/// One notification as its reader reads it — run as the reader, who reads the record it is about as themselves.
+NotificationLine LineOf(Notification n) {
+  var about = n.About;
+  if (about == null) {
+    // SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read) — the read-time half: access lost since
+    // it was delivered (the record reads as nothing to them now) takes it out of the bell, unnamed.
+    n.Lost = true;
+    n.OpenKey = null;
+    n.Problem = "They may no longer read what it is about.";
+    return new NotificationLine { Id = n.Id, Readable = false };
+  }
+  return new NotificationLine { Id = n.Id, Sentence = SaidOf(n), Title = Records.Title(about), Link = Records.Link(about),
+                                By = n.By == null ? "" : NotifierName(n.By) };
+}
+
+/// Mark one of the reader's notifications read, and answer where it opens ("" for nowhere).
+public string OpenNotification(Guid id) {
+  var me = Session.CurrentUser;
+  if (me == null) { return ""; }
+  var n = Notification.FirstOrDefault(x => x.Id == id && x.Recipient == me);
+  if (n == null) { return ""; }
+  MarkRead(n);
+  // Read as the reader: a record they may no longer read has nowhere to open.
+  var about = n.About;
+  var link = about == null ? "" : Records.Link(about);
+  UnitOfWork.Commit();
+  return link;
+}
+
+/// Mark one of the reader's notifications read, or unread again.
+public void MarkNotificationRead(Guid id, bool read = true) {
+  var me = Session.CurrentUser;
+  if (me == null) { return; }
+  var n = Notification.FirstOrDefault(x => x.Id == id && x.Recipient == me);
+  if (n == null) { return; }
+  if (read) { MarkRead(n); }
+  else if (n.Visible && n.ReadAt != null) {
+    // Unread again — unless another about the same thing arrived meanwhile, which already holds its place.
+    if (!Notification.Any(x => x.Recipient == me && x.OpenKey == n.Key && x.Id != n.Id)) {
+      n.ReadAt = null;
+      n.OpenKey = n.Key;
+    }
+  }
+  UnitOfWork.Commit();
+}
+
+/// Mark every notification the reader has read. Answers how many there were.
+public int MarkAllNotificationsRead() {
+  var me = Session.CurrentUser;
+  if (me == null) { return 0; }
+  var unread = Notification.Where(n => n.Recipient == me && n.Visible && n.ReadAt == null).ToList();
+  foreach (var n in unread) { MarkRead(n); }
+  UnitOfWork.Commit();
+  return unread.Count;
+}
+
+void MarkRead(Notification n) {
+  if (n.ReadAt != null) { return; }
+  n.ReadAt = DateTime.UtcNow;
+  n.OpenKey = null;
+}

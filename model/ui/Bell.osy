@@ -1,0 +1,173 @@
+// THE BELL — the count of what the reader has not read, beside their name, and the list behind it.
+//
+// ⚑ THE COUNT IS LIVE, THE WORDS ARE THE READER'S. The number and each row's read state follow the reader's own rows as
+//   they change (a colleague's mention lands; another tab marks it read). What each row SAYS is fetched from the server
+//   in one read as the list opens, in the reader's language, and a row that arrives while it is open fetches its own.
+//
+// ⚑ A ROW IS THE WAY TO THE THING. Pressing it marks it read and opens where it happened; the list closes behind it.
+namespace Osysharp.Notifications;
+
+using Osysharp.Ui;
+
+/// The bell, for the shell's actions: `slot actions { NotificationBell(); }`. It shows how many notifications the reader
+/// has not read, and opens the list — a panel under the bell, or on a phone a sheet from the bottom edge.
+/// `settingsAt`: where the reader's own preferences are ("" to leave the link out). `compact`: the list opens as a
+/// sheet from the bottom edge; left out, the bell asks the layout — the width of the bar it sits in, not of the
+/// buttons beside it — and opens a sheet when that is narrower than a tablet.
+/// In a test: `Ui.Click("Notifications")` (its name carries the count — "Notifications, 2 new").
+[Composable]
+public component NotificationBell(string settingsAt = "/settings/notifications", bool? compact = null) {
+  live var me = Session.CurrentUser;
+  live var meId = me == null ? Guid.Empty : me.Id;
+  live var unread = Notification.Count(n => n.Recipient.Id == meId && n.Visible && n.ReadAt == null);
+  bool open = false;
+  action Toggle() { open = !open; }
+  action Close() { open = false; }
+  render {
+    Box(position: Position.Relative) {
+      ShellCountButton("Notifications", unread, onPress: Toggle) { Icon(Icons.Bell, size: 18); }
+      if (open) {
+        if (!(compact ?? !Layout.AtLeast(Tablet))) {
+          Backdrop(Close);
+          Box(position: Position.Absolute, top: "100%", right: "0", mt: 2, z: ZIndex.Popover,
+              w: "min(400px, calc(100vw - 32px))", bg: Colors.Elevated, color: Colors.OnSurface, rounded: Radius.Lg,
+              shadow: Shadow.Floating, transformOrigin: "top right", animation: KitMenuGrow, overflow: Overflow.Hidden,
+              role: UiRole.Dialog, label: "Your notifications") {
+            NotificationList(settingsAt, Close);
+          }
+        } else {
+          ShellSheet("", onDismiss: Close) { NotificationList(settingsAt, Close); }
+        }
+      }
+    }
+  }
+}
+
+/// The reader's notifications — newest first, unread marked, "Mark all read", and All / Unread. `onDone` runs when a
+/// row is opened (the bell closes). Place it on a page of its own for a full-height list.
+[Composable]
+public component NotificationList(string settingsAt, Action onDone) {
+  live var me = Session.CurrentUser;
+  live var meId = me == null ? Guid.Empty : me.Id;
+  live var rows = Notification.Where(n => n.Recipient.Id == meId && n.Visible).OrderByDescending(n => n.At).Take(40).ToList();
+  live var unread = rows.Count(n => n.ReadAt == null);
+  List<NotificationLine> said = [];
+  bool loaded = false;
+  bool unreadOnly = false;
+  string problem = "";
+  DateTime now = DateTime.UtcNow;
+
+  on mount {
+    try { said = MyNotificationLines(); } catch (Exception ex) { problem = ex.Message; }
+    loaded = true;
+  }
+  on every (TimeSpan.FromMinutes(1)) { now = DateTime.UtcNow; }
+
+  action Open(Guid id) {
+    problem = "";
+    try {
+      var to = OpenNotification(id);
+      onDone();
+      if (to != "") { Navigation.Go(to); }
+    } catch (Exception ex) { problem = ex.Message; }
+  }
+  action MarkAll() {
+    problem = "";
+    try { MarkAllNotificationsRead(); } catch (Exception ex) { problem = ex.Message; }
+  }
+  action ShowAll() { unreadOnly = false; }
+  action ShowUnread() { unreadOnly = true; }
+  action Settings() { onDone(); Navigation.Go(settingsAt); }
+
+  render {
+    Stack(gap: 0, w: "100%") {
+      Row(gap: 2, align: Align.Center, px: 4, pt: 3, pb: 2) {
+        Text("Notifications", fontSize: FontSize.Subhead, fontWeight: FontWeight.Semibold, grow: 1);
+        if (unread > 0) { Button("Mark all read", onPress: MarkAll, size: Size.Sm, tone: Tone.Ghost); }
+      }
+      Box(px: 3, borderBW: 1, border: Colors.Border) {
+        Tabs {
+          Tab("All", selected: !unreadOnly, onPress: ShowAll);
+          Tab(unread > 0 ? "Unread · " + unread : "Unread", selected: unreadOnly, onPress: ShowUnread);
+        }
+      }
+      if (problem != "") { Box(px: 3, pt: 2) { Alert(problem, tone: Tone.Danger); } }
+      Stack(gap: 0, maxH: "min(480px, 70dvh)", overflowY: Overflow.Auto, py: 1, role: UiRole.List, label: "Notification list") {
+        if (!loaded) {
+          Stack(gap: 3, px: 4, py: 3) { SkeletonText(); SkeletonText(); }
+        } else if (rows.Count == 0) {
+          EmptyState("Nothing here yet", body: "When something needs you — a mention, work handed to you, a promise at risk — it appears here.") {
+            slot icon { Icon(Icons.Bell, size: 28, color: Colors.TextMuted); }
+          }
+        } else if (unreadOnly && unread == 0) {
+          EmptyState("You are all caught up", body: "Nothing unread. What you have read stays under All for a while.") {
+            slot icon { Icon(Icons.CheckCircle, size: 28, color: Colors.Success); }
+          }
+        } else {
+          foreach (var n in rows.Where(r => !unreadOnly || r.ReadAt == null)) {
+            NotificationRow(n, said.FirstOrDefault(l => l.Id == n.Id), now, () => Open(n.Id));
+          }
+        }
+      }
+      if (settingsAt != "") {
+        Row(px: 4, py: 2, borderTW: 1, border: Colors.Border, justify: Justify.End) {
+          Button("Notification settings", onPress: Settings, size: Size.Sm, tone: Tone.Ghost);
+        }
+      }
+    }
+  }
+}
+
+/// One notification in the list: who, what happened, on what, when — bold and marked while unread.
+[Composable]
+component NotificationRow(Notification n, NotificationLine? said, DateTime now, Action onPress) {
+  NotificationLine? own = null;
+  on mount {
+    // A row that arrived after the list opened says itself.
+    if (said == null) { try { own = NotificationLineOf(n.Id); } catch (Exception ex) { } }
+  }
+  live var line = said ?? own;
+  live var fresh = n.ReadAt == null;
+  render {
+    if (line == null) {
+      Box(px: 4, py: 3) { SkeletonText(); }
+    } else if (line.Readable) {
+      Pressable(onClick: onPress, label: line.Title != "" ? line.Sentence + " " + line.Title : line.Sentence,
+                role: UiRole.ListItem, w: "100%", px: 4, py: 3, textAlign: TextAlign.Left, transition: Motion.Fast,
+                bg: fresh ? Colors.Primary.Subtle : Colors.Transparent) {
+        Row(gap: 3, align: Align.Start, minW: "0", w: "100%") {
+          if (line.By != "") {
+            Avatar(initials: NotificationInitials(line.By), size: Size.Sm);
+          } else {
+            // The same size as an avatar, so every row's words start on one line.
+            Row(w: Length.AvatarSm, h: Length.AvatarSm, rounded: Radius.Pill, bg: Colors.Muted, align: Align.Center,
+                justify: Justify.Center, shrink: 0, decorative: true) {
+              Icon(Icons.Bell, size: 14, color: Colors.TextMuted);
+            }
+          }
+          Stack(gap: "2px", grow: 1, minW: "0") {
+            Text(line.Sentence, fontSize: FontSize.Label, lineHeight: 1.4,
+                 fontWeight: fresh ? FontWeight.Semibold : FontWeight.Regular, color: Colors.OnSurface);
+            if (line.Title != "") {
+              Text(line.Title, fontSize: FontSize.Caption, color: Colors.TextSecondary, whiteSpace: WhiteSpace.Nowrap,
+                   overflow: Overflow.Hidden, textOverflow: TextOverflow.Ellipsis, minW: "0");
+            }
+            Text(n.Times > 1 ? TimeAgo(n.At, now) + " · " + n.Times + " times" : TimeAgo(n.At, now),
+                 fontSize: FontSize.Caption, color: Colors.TextMuted);
+          }
+          if (fresh) {
+            Box(w: "8px", h: "8px", mt: "6px", rounded: Radius.Pill, bg: Colors.Primary, shrink: 0, label: "Unread");
+          }
+        }
+      }
+    }
+  }
+}
+
+/// "Ines Moreau" → "IM"; "ines@x.se" → "I".
+public string NotificationInitials(string name) {
+  var parts = name.Trim().Split(" ").Where(p => p != "").ToList();
+  if (parts.Count == 0) { return ""; }
+  if (parts.Count == 1) { return parts[0].Substring(0, 1).ToUpper(); }
+  return (parts[0].Substring(0, 1) + parts[parts.Count - 1].Substring(0, 1)).ToUpper();
+}

@@ -1,0 +1,50 @@
+namespace NotificationsKitTests;
+
+using Osysharp.Notifications;
+
+// The studio's pages: the drafts with the bell in the bar, and one draft. The preferences page is the kit's own
+// (`/settings/notifications`, generated from its declared row).
+
+[Title("Drafts")]
+[Page("/")]
+[Authorize(IsWriter)]
+[Render(CSR)]
+component Drafts() {
+  live var drafts = Draft.OrderBy(d => d.Title).ToList();
+  render {
+    Stack(gap: 0) {
+      Row(gap: 3, align: Align.Center, px: 5, py: 3, borderBW: 1, border: Colors.Border) {
+        Text("Studio", fontSize: FontSize.Subhead, fontWeight: FontWeight.Semibold, grow: 1);
+        NotificationBell();
+      }
+      Stack(gap: 2, p: 5, maxW: "760px") {
+        if (drafts.Count == 0) { EmptyState("No drafts yet", body: "Drafts the studio writes appear here."); }
+        foreach (var d in drafts) {
+          Link(href: "/drafts/" + d.Id, color: Colors.OnSurface) { Text(d.Title); }
+        }
+      }
+    }
+  }
+}
+
+/// One draft — where a draft opens, so a notification about one links here.
+[Title("Draft")]
+[Page("/drafts/{id}")]
+[Opens(Draft)]
+[Authorize(IsWriter)]
+[Render(CSR)]
+component DraftPage(Guid id) {
+  live var drafts = Draft.Where(d => d.Id == id).ToList();
+  render {
+    Stack(gap: 0) {
+      Row(gap: 3, align: Align.Center, px: 5, py: 3, borderBW: 1, border: Colors.Border) {
+        Link(href: "/", color: Colors.OnSurface, grow: 1) { Text("Studio", fontSize: FontSize.Subhead, fontWeight: FontWeight.Semibold); }
+        NotificationBell();
+      }
+      Stack(gap: 3, p: 5) {
+        if (drafts.Count == 0) { EmptyState("Not found", body: "This draft is not one you can read."); }
+        foreach (var d in drafts) { Text(d.Title, fontSize: FontSize.Heading, fontWeight: FontWeight.Semibold); }
+      }
+    }
+  }
+}

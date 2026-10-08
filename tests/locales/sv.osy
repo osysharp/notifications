@@ -1,0 +1,372 @@
+// sv (Svenska): the words of NotificationsKitTests, translated.
+// Written and kept in step with the source by `osy translate`: a new text arrives as `=> null`, a text
+// whose source changed keeps its old translation in a `was` clause. The words are yours to edit.
+// Source language: en.
+
+translations sv {
+  // ── DraftPage (/drafts/{id}) ──
+  /// DraftPage · /drafts/{id} · text on the page
+  /// shown through EmptyState.body
+  text "This draft is not one you can read." => null;
+  /// DraftPage · /drafts/{id} · a title
+  /// shown through [Title]
+  title "Draft" => null;
+  /// DraftPage · /drafts/{id} · a title
+  /// shown through EmptyState.title
+  title "Not found" => null;
+
+  // ── Drafts (/) ──
+  /// Drafts · / · text on the page
+  /// shown through EmptyState.body
+  text "Drafts the studio writes appear here." => null;
+  /// Drafts · / · text on the page
+  text "Studio" => null;
+  /// Drafts · / · a title
+  /// shown through [Title]
+  title "Drafts" => null;
+  /// Drafts · / · a title
+  /// shown through EmptyState.title
+  title "No drafts yet" => null;
+
+  // ── NotificationsKitTests.DraftNotices.Sentence ──
+  /// NotificationsKitTests.DraftNotices.Sentence · text in an email
+  /// shown through Sentence()
+  mailText "A draft you read is finished." => "Ett utkast du läste är klart.";
+  /// NotificationsKitTests.DraftNotices.Sentence · text in an email
+  /// shown through Sentence()
+  mailText "Somebody" => "Någon";
+  /// NotificationsKitTests.DraftNotices.Sentence · text in an email
+  /// placeholders: {by} = by (string)
+  /// shown through Sentence()
+  mailText "{by} asked you to read a draft." => "{by} bad dig läsa ett utkast.";
+
+  // ── Osysharp · Osysharp.Personal ──
+  /// Osysharp.Personal · a label (a field, a list item, a menu entry) · at most ~21 characters
+  /// shown through Osysharp.Personal.Contact
+  /// beside: "Identity", "Financial", "Content", "Special category"
+  label "Contact details" => null;
+  /// Osysharp.Personal · a label (a field, a list item, a menu entry) · at most ~13 characters
+  /// shown through Osysharp.Personal.Content
+  /// beside: "Contact details", "Identity", "Financial", "Special category"
+  label "Content" => null;
+  /// Osysharp.Personal · a label (a field, a list item, a menu entry) · at most ~15 characters
+  /// shown through Osysharp.Personal.Financial
+  /// beside: "Contact details", "Identity", "Content", "Special category"
+  label "Financial" => null;
+  /// Osysharp.Personal · a label (a field, a list item, a menu entry) · at most ~14 characters
+  /// shown through Osysharp.Personal.Identity
+  /// beside: "Contact details", "Financial", "Content", "Special category"
+  label "Identity" => null;
+  /// Osysharp.Personal · a label (a field, a list item, a menu entry) · at most ~23 characters
+  /// shown through Osysharp.Personal.Special
+  /// beside: "Contact details", "Identity", "Financial", "Content"
+  label "Special category" => null;
+
+  // ── Osysharp.EmailTemplates · EmailLayout ──
+  /// EmailLayout · a link or button in an email · at most ~17 characters
+  mailLink "Unsubscribe" => null;
+
+  // ── Osysharp.Identity · Osysharp.Identity.IdentitySource ──
+  /// Osysharp.Identity.IdentitySource · a label (a field, a list item, a menu entry) · at most ~24 characters
+  /// shown through Osysharp.Identity.IdentitySource.Idp
+  /// beside: "This app"
+  label "Identity provider" => null;
+  /// Osysharp.Identity.IdentitySource · a label (a field, a list item, a menu entry) · at most ~14 characters
+  /// shown through Osysharp.Identity.IdentitySource.Local
+  /// beside: "Identity provider"
+  label "This app" => null;
+
+  // ── Osysharp.Identity · Osysharp.Identity.Principal ──
+  /// Osysharp.Identity.Principal · validation
+  /// shown through Osysharp.Identity.Principal.Email [Unique]
+  validation "That address already has an account." => null;
+
+  // ── Osysharp.Mail · Osysharp.Mail.IMailbox.Subscribe ──
+  /// Osysharp.Mail.IMailbox.Subscribe · an error message
+  /// placeholders: {Address} = Address (string)
+  /// shown through ValidationException
+  error "The mailbox '{Address}' cannot push; it is polled." => null;
+
+  // ── Osysharp.Mail · Osysharp.Mail.MailStatus ──
+  /// Osysharp.Mail.MailStatus · a label (a field, a list item, a menu entry) · at most ~35 characters
+  /// shown through Osysharp.Mail.MailStatus.Held
+  /// beside: "Waiting", "Sent"
+  label "Not sent — no mail sender" => null;
+  /// Osysharp.Mail.MailStatus · a label (a field, a list item, a menu entry) · at most ~10 characters
+  /// shown through Osysharp.Mail.MailStatus.Sent
+  /// beside: "Waiting", "Not sent — no mail sender"
+  label "Sent" => null;
+
+  // ── Osysharp.Notifications · KitSentence ──
+  /// KitSentence · text in an email
+  /// shown through KitSentence()
+  mailText "Something happened." => "Något hände.";
+  /// KitSentence · text in an email
+  /// shown through KitSentence()
+  mailText "You were mentioned." => "Du nämndes.";
+  /// KitSentence · text in an email
+  /// placeholders: {by} = by (string)
+  /// shown through KitSentence()
+  mailText "{by} mentioned you." => "{by} nämnde dig.";
+
+  // ── Osysharp.Notifications · NotificationBell ──
+  /// NotificationBell · a control's name for screen readers
+  accessibleName "Your notifications" => "Dina aviseringar";
+  /// NotificationBell · a button's label · at most ~19 characters
+  /// shown through ShellCountButton.label
+  button "Notifications" => "Aviseringar";
+
+  // ── Osysharp.Notifications · NotificationDigestMail ──
+  /// NotificationDigestMail · a button's label · at most ~38 characters
+  /// placeholders: {NotificationsAppName} = NotificationsAppName(…) (string)
+  /// shown through EmailButton.label
+  /// beside: "While you were away", "These are waiting for you. Each one opens where it happened."
+  button "Open {NotificationsAppName}" => "Öppna {NotificationsAppName}";
+  /// NotificationDigestMail · the preview line an inbox shows beside an email's subject
+  /// shown through EmailLayout.preview
+  mailPreview "What happened while you were away, newest first." => "Det som hände medan du var borta, det senaste först.";
+  /// NotificationDigestMail · an email's subject line
+  /// placeholders: {NotificationsAppName} = NotificationsAppName(…) (string)
+  mailSubject "1 thing waiting for you in {NotificationsAppName}" => "1 sak väntar på dig i {NotificationsAppName}";
+  /// NotificationDigestMail · an email's subject line
+  /// placeholders: {items.Count} = items.Count (int), {NotificationsAppName} = NotificationsAppName(…) (string) — {items.Count} is a count: give one text per plural form
+  mailSubject "{items.Count} things waiting for you in {NotificationsAppName}" => { one: "1 sak väntar på dig i {NotificationsAppName}", other: "{items.Count} saker väntar på dig i {NotificationsAppName}" };
+  /// NotificationDigestMail · text in an email
+  /// shown through EmailLayout.footer
+  mailText "You get this because you have not read these in the app. Change what is mailed to you under Settings › Notifications." => "Du får det här eftersom du inte har läst dem i appen. Ändra vad som mejlas till dig under Inställningar › Aviseringar.";
+  /// NotificationDigestMail · text on the page
+  /// shown through EmailText.text
+  /// beside: "While you were away"
+  text "These are waiting for you. Each one opens where it happened." => "Det här väntar på dig. Var och en öppnas där det hände.";
+  /// NotificationDigestMail · text on the page
+  /// shown through EmailHeading.text
+  /// beside: "These are waiting for you. Each one opens where it happened."
+  text "While you were away" => "Medan du var borta";
+
+  // ── Osysharp.Notifications · NotificationList ──
+  /// NotificationList · a control's name for screen readers
+  /// beside: "Notifications", "All"
+  accessibleName "Notification list" => "Aviseringslista";
+  /// NotificationList · a button's label · at most ~9 characters
+  /// shown through Tab.label
+  button "All" => "Alla";
+  /// NotificationList · a button's label · at most ~19 characters
+  /// shown through Button.label
+  button "Mark all read" => "Markera alla som lästa";
+  /// NotificationList · a button's label · at most ~30 characters
+  /// shown through Button.label
+  button "Notification settings" => "Aviseringsinställningar";
+  /// NotificationList · a button's label · at most ~12 characters
+  /// shown through Tab.label
+  /// beside: "All"
+  button "Unread" => "Olästa";
+  /// NotificationList · a button's label · at most ~24 characters
+  /// placeholders: {unread} = unread
+  /// shown through Tab.label
+  /// beside: "All"
+  button "Unread · {unread}" => "Olästa · {unread}";
+  /// NotificationList · text on the page
+  /// shown through EmptyState.body
+  text "Nothing unread. What you have read stays under All for a while." => "Inget oläst. Det du har läst ligger kvar under Alla ett tag.";
+  /// NotificationList · text on the page
+  text "Notifications" => "Aviseringar";
+  /// NotificationList · text on the page
+  /// shown through EmptyState.body
+  text "When something needs you — a mention, work handed to you, a promise at risk — it appears here." => "När något behöver dig, som en nämning, arbete som lämnats till dig eller ett löfte i fara, visas det här.";
+  /// NotificationList · a title
+  /// shown through EmptyState.title
+  title "Nothing here yet" => "Inget här än";
+  /// NotificationList · a title
+  /// shown through EmptyState.title
+  title "You are all caught up" => "Du är ikapp";
+
+  // ── Osysharp.Notifications · NotificationMailItem ──
+  /// NotificationMailItem · text in an email
+  /// placeholders: {line.At} = line.At (DateTime)
+  mailText "{line.At} UTC" => "{line.At} UTC";
+
+  // ── Osysharp.Notifications · NotificationMentionMail ──
+  /// NotificationMentionMail · a button's label · at most ~13 characters
+  /// shown through EmailButton.label
+  button "Open it" => "Öppna";
+  /// NotificationMentionMail · the preview line an inbox shows beside an email's subject
+  /// shown through EmailLayout.preview
+  mailPreview "You were mentioned, and have not read it yet." => "Du nämndes och har inte läst det än.";
+  /// NotificationMentionMail · an email's subject line
+  /// placeholders: {NotificationsAppName} = NotificationsAppName(…) (string)
+  mailSubject "You were mentioned in {NotificationsAppName}" => "Du nämndes i {NotificationsAppName}";
+  /// NotificationMentionMail · an email's subject line
+  /// placeholders: {NameOf} = NameOf(…) (string), {NotificationsAppName} = NotificationsAppName(…) (string)
+  mailSubject "{NotifierName} mentioned you in {NotificationsAppName}" => "{NotifierName} nämnde dig i {NotificationsAppName}";
+  /// NotificationMentionMail · text in an email
+  /// shown through EmailLayout.footer
+  mailText "You get this because you asked for mentions at once. Change it under Settings › Notifications." => "Du får det här eftersom du bad om att få nämningar direkt. Ändra det under Inställningar › Aviseringar.";
+
+  // ── Osysharp.Notifications · NotificationPreferencesEditor ──
+  /// NotificationPreferencesEditor · a description
+  /// shown through SettingsPage.description
+  description "The bell shows everything as it happens. These are yours alone: what is mailed to you when you have not read it in the app." => "Klockan visar allt när det händer. De här inställningarna är bara dina: vad som mejlas till dig när du inte har läst det i appen.";
+  /// NotificationPreferencesEditor · text on the page
+  /// shown through SaveBar.saved
+  text "Your notification preferences are saved." => "Dina aviseringsinställningar är sparade.";
+  /// NotificationPreferencesEditor · a title
+  /// shown through SettingsPage.title
+  /// also in NotificationPreferencesPage /settings/notifications
+  title "Notifications" => "Aviseringar";
+
+  // ── Osysharp.Notifications · NotificationPreferencesFields ──
+  /// NotificationPreferencesFields · a description
+  /// shown through SettingsSection.description
+  description "Mail is only ever about what you have not read here. Mail goes to the address you sign in with." => "Mejl handlar bara om det du inte har läst här. Mejlen går till adressen du loggar in med.";
+  /// NotificationPreferencesFields · a hint under a field
+  /// shown through SettingRow.hint
+  hint "A mention waits a few minutes first — read it here and no mail is sent." => "En nämning väntar några minuter först. Läser du den här skickas inget mejl.";
+  /// NotificationPreferencesFields · a label (a field, a list item, a menu entry) · at most ~13 characters
+  /// shown through Dropdown.label
+  label "Mail me" => "Mejla mig";
+  /// NotificationPreferencesFields · a title
+  /// shown through SettingsSection.title
+  title "Mail" => "Mejl";
+
+  // ── Osysharp.Notifications · NotificationRow ──
+  /// NotificationRow · a control's name for screen readers
+  accessibleName "Unread" => "Olästa";
+  /// NotificationRow · text on the page
+  /// placeholders: {TimeAgo} = TimeAgo(…), {n.Times} = n.Times
+  text "{TimeAgo} · {n.Times} times" => null;
+
+  // ── Osysharp.Notifications · NotificationsAppName ──
+  /// NotificationsAppName · an image's description for screen readers
+  /// shown through NotificationsAppName()
+  alt "your app" => "din app";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.NotificationMail ──
+  /// Osysharp.Notifications.NotificationMail · a label (a field, a list item, a menu entry) · at most ~54 characters
+  /// shown through Osysharp.Notifications.NotificationMail.Daily
+  /// beside: "Mentions at once, everything else in a daily digest", "Nothing — I read them in the app"
+  label "A daily digest of what I have not seen" => "En daglig sammanfattning av det jag inte har sett";
+  /// Osysharp.Notifications.NotificationMail · a label (a field, a list item, a menu entry) · at most ~72 characters
+  /// shown through Osysharp.Notifications.NotificationMail.MentionsAtOnce
+  /// beside: "A daily digest of what I have not seen", "Nothing — I read them in the app"
+  label "Mentions at once, everything else in a daily digest" => "Nämningar direkt, allt annat i en daglig sammanfattning";
+  /// Osysharp.Notifications.NotificationMail · a label (a field, a list item, a menu entry) · at most ~45 characters
+  /// shown through Osysharp.Notifications.NotificationMail.Off
+  /// beside: "Mentions at once, everything else in a daily digest", "A daily digest of what I have not seen"
+  label "Nothing — I read them in the app" => "Inget, jag läser dem i appen";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.NotificationState ──
+  /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~28 characters
+  /// shown through Osysharp.Notifications.NotificationState.Merged
+  /// beside: "Waiting", "Shown", "Shown — mail due", "Not shown"
+  label "Joined an unread one" => "Slogs ihop med en oläst";
+  /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~15 characters
+  /// shown through Osysharp.Notifications.NotificationState.Withheld
+  /// beside: "Waiting", "Shown", "Shown — mail due", "Joined an unread one"
+  label "Not shown" => "Visades inte";
+  /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~11 characters
+  /// shown through Osysharp.Notifications.NotificationState.Shown
+  /// beside: "Waiting", "Shown — mail due", "Not shown", "Joined an unread one"
+  label "Shown" => "Visad";
+  /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~23 characters
+  /// shown through Osysharp.Notifications.NotificationState.MailDue
+  /// beside: "Waiting", "Shown", "Not shown", "Joined an unread one"
+  label "Shown — mail due" => "Visad, mejl väntar";
+  /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~13 characters
+  /// shown through Osysharp.Notifications.NotificationState.Queued
+  /// beside: "Shown", "Shown — mail due", "Not shown", "Joined an unread one"
+  /// also in Osysharp.Mail.MailStatus
+  label "Waiting" => "Väntar";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.NotificationWatchState ──
+  /// Osysharp.Notifications.NotificationWatchState · a label (a field, a list item, a menu entry) · at most ~13 characters
+  /// shown through Osysharp.Notifications.NotificationWatchState.Stopped
+  /// beside: "Sweeping hourly"
+  label "Stopped" => "Stoppad";
+  /// Osysharp.Notifications.NotificationWatchState · a label (a field, a list item, a menu entry) · at most ~21 characters
+  /// shown through Osysharp.Notifications.NotificationWatchState.Watching
+  /// beside: "Stopped"
+  label "Sweeping hourly" => "Körs varje timme";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections ──
+  /// Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections · a heading
+  /// shown through SettingsLink.Group
+  heading "You" => "Du";
+  /// Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections · a hint under a field
+  /// shown through SettingsLink.Hint
+  hint "What is mailed to you when you have not seen it here." => "Vad som mejlas till dig när du inte har sett det här.";
+  /// Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections · a label (a field, a list item, a menu entry) · at most ~19 characters
+  /// shown through SettingsLink.Label
+  label "Notifications" => "Aviseringar";
+
+  // ── Osysharp.Notifications · TopicNamed ──
+  /// TopicNamed · an error message
+  /// placeholders: {key} = key (string), {Join} = string.Join(…) (string)
+  /// shown through ValidationException
+  error "No notification topic is called '{key}'. The topics are: {Join}." => "Inget aviseringsämne heter '{key}'. Ämnena är: {Join}.";
+
+  // ── Osysharp.Notifications · __Settings_NotificationPreferences_Row ──
+  /// __Settings_NotificationPreferences_Row · an error message
+  /// shown through ValidationException
+  error "Sign in to see your own settings." => "Logga in för att se dina egna inställningar.";
+
+  // ── Osysharp.Ui · TimeAgo ──
+  /// TimeAgo · text on the page
+  /// shown through TimeAgo()
+  text "just now" => "just nu";
+  /// TimeAgo · text on the page
+  /// shown through TimeAgo()
+  text "yesterday" => "i går";
+  /// TimeAgo · text on the page
+  /// placeholders: {ToInt} = Convert.ToInt(…) (int) — {ToInt} is a count: give one text per plural form
+  /// shown through TimeAgo()
+  text "{ToInt} h ago" => { one: "för 1 h sedan", other: "för {ToInt} h sedan" };
+  /// TimeAgo · text on the page
+  /// placeholders: {ToInt} = Convert.ToInt(…) (int) — {ToInt} is a count: give one text per plural form
+  /// shown through TimeAgo()
+  text "{ToInt} min ago" => { one: "för 1 min sedan", other: "för {ToInt} min sedan" };
+
+  // ── Osysharp.Workflow · Osysharp.Workflow.CorrelationOutcome ──
+  /// Osysharp.Workflow.CorrelationOutcome · a label (a field, a list item, a menu entry) · at most ~27 characters
+  /// shown through Osysharp.Workflow.CorrelationOutcome.Ambiguous
+  /// beside: "recorded", "no such key", "nothing is waiting", "no correlation rule"
+  label "more than one match" => null;
+  /// Osysharp.Workflow.CorrelationOutcome · a label (a field, a list item, a menu entry) · at most ~27 characters
+  /// shown through Osysharp.Workflow.CorrelationOutcome.NoRule
+  /// beside: "recorded", "no such key", "nothing is waiting", "more than one match"
+  label "no correlation rule" => null;
+  /// Osysharp.Workflow.CorrelationOutcome · a label (a field, a list item, a menu entry) · at most ~17 characters
+  /// shown through Osysharp.Workflow.CorrelationOutcome.NoSuchKey
+  /// beside: "recorded", "nothing is waiting", "more than one match", "no correlation rule"
+  label "no such key" => null;
+  /// Osysharp.Workflow.CorrelationOutcome · a label (a field, a list item, a menu entry) · at most ~26 characters
+  /// shown through Osysharp.Workflow.CorrelationOutcome.NotRunning
+  /// beside: "recorded", "no such key", "more than one match", "no correlation rule"
+  label "nothing is waiting" => null;
+  /// Osysharp.Workflow.CorrelationOutcome · a label (a field, a list item, a menu entry) · at most ~14 characters
+  /// shown through Osysharp.Workflow.CorrelationOutcome.Deposited
+  /// beside: "no such key", "nothing is waiting", "more than one match", "no correlation rule"
+  label "recorded" => null;
+
+  // ── Osysharp.Workflow · Osysharp.Workflow.SlaKind ──
+  /// Osysharp.Workflow.SlaKind · a label (a field, a list item, a menu entry) · at most ~20 characters
+  /// shown through Osysharp.Workflow.SlaKind.Assigned
+  /// beside: "resolution", "state expiry", "ticket deadline"
+  label "first response" => null;
+  /// Osysharp.Workflow.SlaKind · a label (a field, a list item, a menu entry) · at most ~16 characters
+  /// shown through Osysharp.Workflow.SlaKind.Finished
+  /// beside: "first response", "state expiry", "ticket deadline"
+  label "resolution" => null;
+  /// Osysharp.Workflow.SlaKind · a label (a field, a list item, a menu entry) · at most ~18 characters
+  /// shown through Osysharp.Workflow.SlaKind.Expire
+  /// beside: "first response", "resolution", "ticket deadline"
+  label "state expiry" => null;
+  /// Osysharp.Workflow.SlaKind · a label (a field, a list item, a menu entry) · at most ~21 characters
+  /// shown through Osysharp.Workflow.SlaKind.Deadline
+  /// beside: "first response", "resolution", "state expiry"
+  label "ticket deadline" => null;
+
+  // ── __AppSettingValue_Osysharp_Notifications_NotificationsSetup ──
+  /// __AppSettingValue_Osysharp_Notifications_NotificationsSetup · an image's description for screen readers
+  /// shown through NotificationsSetup.AppName
+  alt "Studio" => null;
+}

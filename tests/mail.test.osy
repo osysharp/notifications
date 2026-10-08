@@ -1,0 +1,174 @@
+// What is mailed: a daily digest of what was not read, a mention at once if it stays unread — each person's own choice,
+// in their own language — and nothing kept longer than it is needed.
+using Osysharp.Identity;
+using Osysharp.Mail;
+using Osysharp.Notifications;
+using Osysharp.Clock;
+using NotificationsKitTests;
+
+/// What a mail said — copied out while it is read as the editor (a row read inside `runas` and used outside it is read
+/// again by nobody, and its personal fields are not theirs).
+class Sent {
+  public string Subject = "";
+  public string Text = "";
+}
+
+/// The mail sent to `address`, oldest first — read as the editor, who may read the outbox here.
+List<Sent> MailTo(string address) {
+  List<Sent> found = [];
+  runas (Ada) {
+    found = OutgoingMail.Where(m => m.To == address).OrderBy(m => m.CreatedAt).ToList()
+      .Select(m => new Sent { Subject = m.Subject, Text = m.Text ?? "" }).ToList();
+  }
+  return found;
+}
+
+[Test(Studio)]
+void what_was_not_read_is_mailed_in_one_digest_a_day() {
+  TestClock.Set(new DateTime(2030, 3, 4, 5, 0, 0));
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  // Before the digest hour, nothing.
+  Assert.Equal(0, MailTo("bo@studio.test").Count);
+
+  TestClock.Set(new DateTime(2030, 3, 4, 6, 30, 0));
+  Background.Settle();
+  var mail = MailTo("bo@studio.test");
+  Assert.Equal(1, mail.Count);
+  Assert.Equal("1 thing waiting for you in Studio", mail[0].Subject);
+  Assert.Contains("Ada Lindqvist asked you to read a draft.", mail[0].Text);
+  Assert.Contains("Spring issue", mail[0].Text);
+
+  // The same day: nothing more, even with something new.
+  runas (Cy) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  TestClock.Set(new DateTime(2030, 3, 4, 9, 30, 0));
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+
+  // The next day: only what was not mailed before — Cy's, which joined the unread one, is not mailed again.
+  runas (Ada) { AskForARead(DraftNamed("Salary memo"), PersonAt("cy@studio.test")); }
+  runas (Cy) { AskForARead(DraftNamed("Spring issue"), PersonAt("ada@studio.test")); }
+  TestClock.Set(new DateTime(2030, 3, 5, 6, 30, 0));
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+  Assert.Equal(1, MailTo("ada@studio.test").Count);
+  // Cy may not read the private draft: no digest is made of it.
+  Assert.Equal(0, MailTo("cy@studio.test").Count);
+}
+
+[Test(Studio)]
+void the_digest_goes_out_in_the_teams_morning_on_the_apps_clock() {
+  // The studio works in Tokyo (UTC+9): 06:00 there is 21:00 UTC the evening before.
+  runas (Ada) {
+    new ClockSettings { TimeZone = Zone.Of("Asia/Tokyo") };
+    new Draft { Title = "Summer issue", Writer = Person.Single(p => p.Email == "ada@studio.test") };
+    UnitOfWork.Commit();
+  }
+  TestClock.Set(new DateTime(2030, 3, 3, 20, 0, 0));          // 05:00 on 4 March in Tokyo
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  Assert.Equal(0, MailTo("bo@studio.test").Count);
+
+  TestClock.Set(new DateTime(2030, 3, 3, 21, 30, 0));         // 06:30 in Tokyo — the morning, though UTC is still the 3rd
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+
+  // 06:30 UTC on the 4th is 15:30 the same day in Tokyo: one digest a day there, so nothing more.
+  runas (Ada) { AskForARead(DraftNamed("Summer issue"), PersonAt("bo@studio.test")); }
+  TestClock.Set(new DateTime(2030, 3, 4, 6, 30, 0));
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+
+  // The next morning in Tokyo, the new one goes.
+  TestClock.Set(new DateTime(2030, 3, 4, 21, 30, 0));
+  Background.Settle();
+  Assert.Equal(2, MailTo("bo@studio.test").Count);
+}
+
+[Test(Studio)]
+void a_digest_is_written_in_the_language_its_reader_reads_the_app_in() {
+  TestClock.Set(new DateTime(2030, 3, 4, 5, 0, 0));
+  // Bo reads his bell in Swedish — the bell remembers it.
+  runas (Bo) {
+    Session.SetLanguage("sv");
+    MyNotificationLines();
+  }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("cy@studio.test")); }
+  Background.Settle();
+  TestClock.Set(new DateTime(2030, 3, 4, 6, 30, 0));
+  Background.Settle();
+  var sv = MailTo("bo@studio.test").Single();
+  Assert.Equal("1 sak väntar på dig i Studio", sv.Subject);
+  Assert.Contains("Ada Lindqvist bad dig läsa ett utkast.", sv.Text);
+  // Cy never said: the app's own language.
+  var en = MailTo("cy@studio.test").Single();
+  Assert.Equal("1 thing waiting for you in Studio", en.Subject);
+}
+
+[Test(Studio)]
+void a_mention_is_mailed_at_once_only_while_it_is_still_unread() {
+  TestClock.Set(new DateTime(2030, 3, 4, 10, 0, 0));
+  runas (Cy) { MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  Assert.Equal(0, MailTo("bo@studio.test").Count);
+  TestClock.Advance(TimeSpan.FromMinutes(6));
+  Background.Settle();
+  var mail = MailTo("bo@studio.test");
+  Assert.Equal(1, mail.Count);
+  Assert.Equal("Cy Holm mentioned you in Studio", mail[0].Subject);
+
+  // Read in the app before the wait is over: no mail.
+  runas (Bo) { MarkAllNotificationsRead(); }
+  runas (Ada) { MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) { MarkAllNotificationsRead(); }
+  TestClock.Advance(TimeSpan.FromMinutes(6));
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+}
+
+[Test(Studio)]
+void nothing_is_mailed_to_somebody_who_chose_to_read_them_in_the_app() {
+  runas (Bo) {
+    new NotificationPreferences { Person = PersonAt("bo@studio.test"), Mail = NotificationMail.Off };
+    UnitOfWork.Commit();
+  }
+  TestClock.Set(new DateTime(2030, 3, 4, 10, 0, 0));
+  runas (Cy) { MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  TestClock.Set(new DateTime(2030, 3, 5, 7, 0, 0));
+  Background.Settle();
+  Assert.Equal(0, MailTo("bo@studio.test").Count);
+  runas (Bo) { Assert.Equal(1, UnreadNotifications()); }
+}
+
+[Test(Studio)]
+void a_read_notification_is_deleted_after_a_month_and_an_unread_one_after_half_a_year() {
+  TestClock.Set(new DateTime(2030, 3, 4, 10, 0, 0));
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("cy@studio.test")); }
+  Background.Settle();
+  runas (Bo) { MarkAllNotificationsRead(); }
+  TestClock.Advance(TimeSpan.FromDays(31));
+  Background.Settle();
+  runas (Bo) { Assert.Equal(0, Notification.Count()); }
+  runas (Cy) { Assert.Equal(1, Notification.Count()); }
+  TestClock.Advance(TimeSpan.FromDays(150));
+  Background.Settle();
+  runas (Cy) { Assert.Equal(0, Notification.Count()); }
+}
+
+[Test(Studio)]
+void preferences_are_each_persons_own() {
+  runas (Bo) {
+    new NotificationPreferences { Person = PersonAt("bo@studio.test"), Mail = NotificationMail.Daily };
+    UnitOfWork.Commit();
+    Assert.True(AnnouncedSettings().Any(l => l.To == "/settings/notifications"));
+  }
+  runas (Cy) {
+    Assert.Equal(0, NotificationPreferences.Count());
+    Assert.Denied(() => new NotificationPreferences { Person = PersonAt("bo@studio.test"), Mail = NotificationMail.Off });
+  }
+  runas (Bo) { Assert.Equal(NotificationMail.Daily, NotificationPreferences.Single().Mail); }
+}

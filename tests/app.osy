@@ -1,0 +1,14 @@
+// The producer's test project for Osysharp.Notifications — a small studio's shared drafts: writers ask each other for a
+// read, mention each other, and some drafts are private to their writer and the editors. NOT a helpdesk on purpose: the
+// kit knows nothing of tickets, and this app tells people about its own `Draft` rows, in its own words.
+app NotificationsKitTests {
+  model "model/**/*.osy";
+  tests "**/*.test.osy";
+  use Osysharp.Identity@0;
+  use Osysharp.Notifications@1;
+  use Osysharp.Mail@0;
+  use Osysharp.EmailTemplates@0;
+  use Osysharp.Clock@0;
+  use Osysharp.Workflow;
+  use Osysharp.Ui;
+}

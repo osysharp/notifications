@@ -1,0 +1,39 @@
+// The studio every test starts from: Ada edits (she reads every draft), Bo and Cy write. Two drafts — one the whole
+// studio reads, one private to Ada and the editors.
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+[TestFixture]
+void Studio() {
+  var ada = new Person { Email = "ada@studio.test", DisplayName = "Ada Lindqvist", CodeHash = Security.HashPassword("1111") };
+  new RoleGrant { Member = ada, Role = StudioRole.Editor };
+  var bo = new Person { Email = "bo@studio.test", DisplayName = "Bo Ek", CodeHash = Security.HashPassword("2222") };
+  new RoleGrant { Member = bo, Role = StudioRole.Writer };
+  var cy = new Person { Email = "cy@studio.test", DisplayName = "Cy Holm", CodeHash = Security.HashPassword("3333") };
+  new RoleGrant { Member = cy, Role = StudioRole.Writer };
+  // Dee left the studio: her account is switched off, kept for what she did.
+  var dee = new Person { Email = "dee@studio.test", DisplayName = "Dee Falk", CodeHash = Security.HashPassword("4444"), IsActive = false };
+  new RoleGrant { Member = dee, Role = StudioRole.Writer };
+  new Draft { Title = "Spring issue", Writer = ada };
+  new Draft { Title = "Salary memo", Writer = ada, Private = true };
+}
+
+principal Ada => Person.Single(p => p.Email == "ada@studio.test");
+principal Bo => Person.Single(p => p.Email == "bo@studio.test");
+principal Cy => Person.Single(p => p.Email == "cy@studio.test");
+principal Dee => Person.Single(p => p.Email == "dee@studio.test");
+
+/// A person by address, read as an editor.
+Person PersonAt(string email) {
+  Person? found = null;
+  runas (Ada) { found = Person.Single(p => p.Email == email); }
+  return found!;
+}
+
+/// A draft by title, read as an editor (who reads them all).
+Draft DraftNamed(string title) {
+  Draft? found = null;
+  runas (Ada) { found = Draft.Single(d => d.Title == title); }
+  return found!;
+}

@@ -1,0 +1,199 @@
+// Delivery: after the commit, only to somebody who may read what it is about, one unread per thing, and each person's own.
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+[Test(Studio)]
+void a_request_for_a_read_reaches_the_bell_once_it_is_delivered() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  // Written, not yet delivered: nothing in Bo's bell.
+  runas (Bo) { Assert.Equal(0, UnreadNotifications()); }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(1, UnreadNotifications());
+    var line = MyNotificationLines().Single();
+    Assert.Equal("Ada Lindqvist asked you to read a draft.", line.Sentence);
+    Assert.Equal("“Spring issue”", line.Title);
+    Assert.Equal("Ada Lindqvist", line.By);
+    Assert.True(line.Link.StartsWith("/drafts/"));
+  }
+}
+
+// SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read) — the delivery half.
+[Test(Studio)]
+void a_notification_about_a_record_the_recipient_may_not_read_is_never_shown() {
+  runas (Ada) {
+    AskForARead(DraftNamed("Salary memo"), PersonAt("bo@studio.test"));
+    // …and one Bo may read, so the settle below is shown to have delivered.
+    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+  }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(1, UnreadNotifications());
+    var lines = MyNotificationLines();
+    Assert.Equal(1, lines.Count);
+    Assert.Equal("“Spring issue”", lines[0].Title);
+    Assert.False(lines.Any(l => l.Title.Contains("Salary")));
+  }
+  // The editor may read it, so the same notification reaches her.
+  runas (Bo) { AskForARead(DraftNamed("Salary memo"), PersonAt("ada@studio.test")); }
+  Background.Settle();
+  runas (Ada) { Assert.Equal("“Salary memo”", MyNotificationLines().Single().Title); }
+}
+
+// …and the read-time half: access lost after it was delivered takes it out of the bell, unnamed.
+[Test(Studio)]
+void a_notification_leaves_the_bell_when_its_reader_can_no_longer_read_the_record() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Ada) {
+    var d = Draft.Single(x => x.Title == "Spring issue");
+    d.Private = true;
+    UnitOfWork.Commit();
+  }
+  runas (Bo) {
+    var line = MyNotificationLines().Single();
+    Assert.False(line.Readable);
+    Assert.Equal("", line.Title);
+    Assert.Equal(0, UnreadNotifications());
+    Assert.Empty(MyNotificationLines());
+  }
+}
+
+[Test(Studio)]
+void a_second_notification_about_the_same_thing_joins_the_unread_one() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Cy) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    var n = Notification.Single();
+    Assert.Equal(2, n.Times);
+    Assert.Equal("Cy Holm asked you to read a draft.", MyNotificationLines().Single().Sentence);
+    Assert.Equal(1, UnreadNotifications());
+    // Once read, the next one about it is new again.
+    MarkNotificationRead(n.Id);
+  }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(2, Notification.Count());
+    Assert.Equal(1, UnreadNotifications());
+  }
+}
+
+[Test(Studio)]
+void nobody_is_told_what_they_did_themselves() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("ada@studio.test")); }
+  Background.Settle();
+  runas (Ada) { Assert.Equal(0, Notification.Count()); }
+}
+
+// The app writes nothing to tell the kit about its records: a draft's title and page are the draft's own facts. An event
+// that says nothing of its own says its label.
+[Test(Studio)]
+void the_record_says_its_own_title_and_page_and_an_event_with_no_words_its_label() {
+  runas (Ada) {
+    Notify(PersonAt("bo@studio.test"), new MemoFiled { Draft = DraftNamed("Spring issue") });
+    UnitOfWork.Commit();
+  }
+  Background.Settle();
+  runas (Bo) {
+    var line = MyNotificationLines().Single();
+    Assert.Equal("Memo filed", line.Sentence);
+    Assert.Equal("“Spring issue”", line.Title);
+    Assert.Equal("/drafts/" + DraftNamed("Spring issue").Id.ToString(), line.Link);
+  }
+}
+
+// A notification keeps the record it is about and the event itself, by its class — said when it is read.
+[Test(Studio)]
+void the_event_is_kept_by_its_class_and_said_when_read() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    var n = Notification.Single();
+    Assert.Equal("NotificationsKitTests.ReadAsked", n.Kind);
+    Assert.True(n.About is Draft);
+    Assert.Equal("Ada Lindqvist asked you to read a draft.", SaidOf(n));
+  }
+}
+
+// F-WORDS1 — a sentence is said in the READER's words when it is read: Bo reads the same notification in Swedish.
+[Test(Studio)]
+void a_sentence_is_said_in_the_readers_language() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    Session.SetLanguage("sv");
+    Assert.Equal("Ada Lindqvist bad dig läsa ett utkast.", MyNotificationLines().Single().Sentence);
+  }
+}
+
+// A notification about a record that is deleted goes with it — nobody is left a line about nothing.
+[Test(Studio)]
+void a_notification_goes_with_the_record_it_is_about() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Ada) {
+    DraftNamed("Spring issue").Delete();
+    UnitOfWork.Commit();
+  }
+  runas (Bo) { Assert.Equal(0, Notification.Count()); }
+}
+
+// SECURITY-INVARIANT(notifications-are-the-recipients-own)
+[Test(Studio)]
+void nobody_reads_or_writes_another_persons_notifications() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  Guid id = Guid.Empty;
+  runas (Bo) { id = Notification.Single().Id; }
+  runas (Cy) {
+    Assert.Equal(0, Notification.Count());
+    // Marking somebody else's read does nothing — it is not theirs to find.
+    MarkNotificationRead(id);
+    Assert.Equal("", OpenNotification(id));
+    // A page may ask to tell somebody (the app grants it), but not put one straight in their bell, nor put somebody
+    // else's name on it.
+    var bo = PersonAt("bo@studio.test");
+    var ada = PersonAt("ada@studio.test");
+    var draft = DraftNamed("Spring issue");
+    Assert.Denied(() => new Notification { Recipient = bo, About = draft, Kind = "ReadAsked", Key = "x",
+                                           Visible = true, At = DateTime.UtcNow });
+    Assert.Denied(() => new Notification { Recipient = bo, About = draft, Kind = "ReadAsked", Key = "y",
+                                           By = ada, At = DateTime.UtcNow });
+  }
+  runas (Bo) { Assert.Equal(1, UnreadNotifications()); }
+}
+
+[Test(Studio)]
+void opening_one_marks_it_read_and_answers_where_it_opens_and_mark_all_read_clears_the_rest() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  runas (Cy) { MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(2, UnreadNotifications());
+    var mention = Notification.Single(n => n.Mention);
+    Assert.True(OpenNotification(mention.Id).StartsWith("/drafts/"));
+    Assert.Equal(1, UnreadNotifications());
+    // Unread again, and then everything read at once.
+    MarkNotificationRead(mention.Id, read: false);
+    Assert.Equal(2, UnreadNotifications());
+    Assert.Equal(2, MarkAllNotificationsRead());
+    Assert.Equal(0, UnreadNotifications());
+    // Read ones stay in the list.
+    Assert.Equal(2, MyNotificationLines().Count);
+  }
+}
+
+[Test(Studio)]
+void a_switched_off_account_is_told_nothing() {
+  runas (Ada) {
+    AskForARead(DraftNamed("Spring issue"), PersonAt("dee@studio.test"));
+    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+  }
+  Background.Settle();
+  runas (Dee) { Assert.Equal(0, Notification.Count()); }
+  runas (Bo) { Assert.Equal(1, Notification.Count()); }
+}

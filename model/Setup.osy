@@ -1,0 +1,159 @@
+namespace Osysharp.Notifications;
+
+using Osysharp.Identity;
+
+// ── what the app says ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/// Who has a bell and notification preferences — the people the app tells things. `policy ReceivesNotifications => IsAgent;`
+policy ReceivesNotifications;
+
+/// How the app's notifications work — `app.Notifications = new NotificationsSetup { AppName = "Studio" };`.
+///
+/// The kit needs nothing about the records it tells people about, nor about what happened to them: what a record is
+/// called, where it opens and who may read it are the record's own facts (`[Title]`, the page that `[Opens]` it, its
+/// `security { }`), and what happened is an event, which says itself (`e.Sentence()`).
+[AppSetting("Notifications")]
+public class NotificationsSetup {
+  /// The name a mail is signed with ("Harbour"). Empty: the mail says "your app".
+  public string AppName = "";
+  /// How long a READ notification is kept before it is deleted.
+  public TimeSpan KeepRead = TimeSpan.FromDays(30);
+  /// How long an UNREAD one is kept — somebody away for a month still finds what happened, and then it goes.
+  public TimeSpan KeepUnread = TimeSpan.FromDays(180);
+  /// How long a mention waits, unread, before it is mailed to somebody who asked for mentions at once — long enough
+  /// that a person at their desk reads it in the app and gets no mail.
+  public TimeSpan MentionMailAfter = TimeSpan.FromMinutes(5);
+  /// The hour the daily digest goes out on the app's clock (`Osysharp.Clock`, the time zone staff pick in Settings ›
+  /// Time and date) — the first hourly sweep at or after it, once a day.
+  public int DigestHour = 6;
+  /// What a person's mail says and in which language — override `LanguageOf` when the app keeps one on the account.
+  public NotificationPeople People = new NotificationPeople();
+}
+
+/// What the kit asks the app about the people it tells. The defaults need nothing from the app.
+public class NotificationPeople {
+  /// The language `person`'s mail is written in. The default: the one they last read the app in (their bell records
+  /// it), else the app's own. An app that keeps a `[PreferredCulture]` on the account answers it here.
+  public virtual string LanguageOf(Principal person) { return LastReadIn(person); }
+}
+
+/// Tell `to` that `e` happened — any event, the app's own or a kit's, about any record the app keeps (its first record
+/// member): `Notify(bo, new DraftReadAsked { Draft = draft }, by: Session.CurrentUser)`. From a page, a function, a
+/// workflow body or an `[On]` handler that heard the event. Delivered after the caller's commit (never before, so
+/// nobody is told about something that was rolled back), and only if `to` may read the record then. Said with the
+/// event's own `Sentence()` when it is READ, in the reader's language. `by`: who did it — nobody is told what they did
+/// themselves. `key`: what makes two the same thing — by default the record and the kind of event, so a second "at risk"
+/// on one ticket moves the unread one to the top rather than adding another. `mention`: somebody NAMED them — what
+/// "mail me mentions at once" means.
+public void Notify(Principal to, Event e, Principal? by = null, string key = "", bool mention = false) {
+  TellAbout(to, e, by, mention, key);
+}
+
+/// Tell each of `people` that `e` happened — `Notify` for every one of them, once each.
+public void NotifyAll(List<Principal> people, Event e, Principal? by = null) {
+  List<Guid> told = [];
+  foreach (var p in people) {
+    if (told.Contains(p.Id)) { continue; }
+    told.Add(p.Id);
+    TellAbout(p, e, by, false, "");
+  }
+}
+
+/// `by` named `to` about `about` — a mention, which their preferences may mail at once, in the kit's own words
+/// ("Ada mentioned you."). An app with an event of its own for it says `Notify(to, new MentionedInNote { … },
+/// by: …, mention: true)`.
+public void Mention(Principal to, Entity about, Principal? by = null) {
+  if (by != null && by.Id == to.Id) { return; }
+  new Notification { Recipient = to, About = about, By = by, Mention = true, Key = about.Id.ToString() + ":mention",
+                     At = DateTime.UtcNow };
+}
+
+/// The kit's own words: a mention with no event of the app's, and an event that can no longer be read back.
+public string KitSentence(Notification n) {
+  var by = n.By == null ? "" : NotifierName(n.By);
+  if (n.Mention && n.Kind == "") { return by != "" ? $"{by} mentioned you." : "You were mentioned."; }
+  return "Something happened.";
+}
+
+/// How somebody is named in a notification: their name, or their address when they have none.
+public string NotifierName(Principal p) { return p.DisplayName != "" ? p.DisplayName : p.Email; }
+
+/// What `n` says, in the reader's words — its event's own sentence, read back as the reader may read it; the event's
+/// label when a record it names is not theirs to read (or no longer there); the kit's own words for a mention.
+public string SaidOf(Notification n) {
+  if (n.Kind == "" || n.Payload == "") { return KitSentence(n); }
+  var e = Events.Read(n.Payload);
+  if (e != null) { return e!.Sentence(); }
+  var kind = n.Kind;
+  var info = Events.Catalog().FirstOrDefault(c => c.Type == kind);
+  return info == null ? KitSentence(n) : info!.Label;
+}
+
+// ── each person's own preferences ─────────────────────────────────────────────────────────────────────────────────────
+
+/// What is mailed to a person. ⚠ Appended, never inserted: an enum is stored by position.
+public enum NotificationMail {
+  [Label("Mentions at once, everything else in a daily digest")] MentionsAtOnce,
+  [Label("A daily digest of what I have not seen")] Daily,
+  [Label("Nothing — I read them in the app")] Off,
+}
+
+/// A person's own notification preferences — one row each, made the first time they open the page (D-SETTINGSTIER1,
+/// a personal section: `Owner = Person`). The page is generated: `NotificationPreferencesPage` at
+/// `/settings/notifications`.
+[Settings("Notifications", Authorize = ReceivesNotifications, Owner = Person, Route = "/settings/notifications",
+          Group = "You", Order = 10, Icon = Icons.Bell,
+          Hint = "What is mailed to you when you have not seen it here.",
+          Description = "The bell shows everything as it happens. These are yours alone: what is mailed to you when you have not read it in the app.",
+          Saved = "Your notification preferences are saved.")]
+[SettingsGroup("Mail", "Mail is only ever about what you have not read here. Mail goes to the address you sign in with.")]
+// The app's privacy desk reads them to answer a person's request (Osysharp.Privacy.Notifications) — its grant:
+// `partial entity NotificationPreferences { security { allow read when ManagesPrivacy; } }`.
+[Authority(Extensible)]
+public entity NotificationPreferences {
+  /// Whose they are.
+  [Required] Principal Person;
+  [Setting("Mail me", Group = "Mail", Hint = "A mention waits a few minutes first — read it here and no mail is sent.")]
+  NotificationMail Mail = NotificationMail.MentionsAtOnce;
+  /// The language they last read the app in — what their mail is written in (`NotificationPeople.LanguageOf`).
+  [MaxLength(20)] string Language = "";
+  /// When their last daily digest went.
+  DateTime? LastDigestAt;
+  security {
+    // A person's own row: they read it and change it, and nobody else does — the sweep that mails them reads it as the
+    // system. Which language they read in and when they were last mailed are the kit's to write.
+    allow read, create, update when ReceivesNotifications where Person == user;
+    deny update Person, LastDigestAt;
+  }
+}
+
+/// How `person` wants to be mailed — their row's choice, or the default when they never opened the page.
+public NotificationMail MailOf(Principal person) {
+  var mine = NotificationPreferences.FirstOrDefault(p => p.Person == person);
+  return mine == null ? NotificationMail.MentionsAtOnce : mine.Mail;
+}
+
+/// The language `person` last read the app in — "" when the app never saw them read it.
+public string LastReadIn(Principal person) {
+  var mine = NotificationPreferences.FirstOrDefault(p => p.Person == person);
+  return mine == null ? "" : mine.Language;
+}
+
+/// The language `person`'s mail is written in: the app's answer, when it is one the app speaks; else its first.
+string MailLanguageOf(Principal person) {
+  var said = App.Setting<NotificationsSetup>().People.LanguageOf(person);
+  return App.Languages.Contains(said) ? said : App.Languages[0];
+}
+
+/// Remember the language the reader reads in now — what their next mail is written in. Their row is made the first time.
+void RememberLanguage() {
+  var me = Session.CurrentUser;
+  if (me == null) { return; }
+  var language = Session.Language;
+  var mine = NotificationPreferences.FirstOrDefault(p => p.Person == me);
+  if (mine == null) {
+    new NotificationPreferences { Person = me, Language = language };
+  } else if (mine.Language != language) {
+    mine.Language = language;
+  }
+}
