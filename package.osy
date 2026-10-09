@@ -24,14 +24,14 @@
 //   (a throw is retried); one about the same thing (its key) that is still unread is not a second row — the unread one
 //   moves to the top, counting how often. A mail is sent once per notification.
 //
-// ⚑ THE EVENT, NOT ITS SENTENCE (D-RTL2 Q2). A notification keeps the event itself and says it with the event's own
+// ⚑ THE EVENT, NOT ITS SENTENCE. A notification keeps the event itself and says it with the event's own
 //   `Sentence()` when it is read — the bell in the reader's language, the mail in the recipient's — with the event's
 //   records read as the reader may read them.
 //
 // ⚑ THE APP SAYS ONE THING — who has a bell, and preferences:
 //     policy ReceivesNotifications => IsAgent;
 package Osysharp.Notifications {
-  version     "1.1.1";
+  version "1.1.2";
   minPlatform "0.9.0";
   summary     "telling a person something needs them — a bell with a live count and a list (read and unread, mark all read), a daily mail digest of what they have not seen or a mention mailed at once (their own choice, in their own language), delivered durably after the commit, deduplicated while unread, and never about a record the recipient may not read under their own security.";
   model "model/**/*.osy";

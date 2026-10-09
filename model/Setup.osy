@@ -99,8 +99,8 @@ public enum NotificationMail {
   [Label("Nothing — I read them in the app")] Off,
 }
 
-/// A person's own notification preferences — one row each, made the first time they open the page (D-SETTINGSTIER1,
-/// a personal section: `Owner = Person`). The page is generated: `NotificationPreferencesPage` at
+/// A person's own notification preferences — one row each, made the first time they open the page (a
+/// personal section: `Owner = Person`). The page is generated: `NotificationPreferencesPage` at
 /// `/settings/notifications`.
 [Settings("Notifications", Authorize = ReceivesNotifications, Owner = Person, Route = "/settings/notifications",
           Group = "You", Order = 10, Icon = Icons.Bell,

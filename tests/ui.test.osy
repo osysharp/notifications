@@ -1,6 +1,6 @@
 // THE BELL ON SCREEN — driven as a person uses it: the count, the list with read and unread, opening one, marking all
 // read, the empty states, and their own preferences — wide and on a phone. `osy test --pixels` photographs each
-// (`Ui.Shot`); Docs/OsySharp/design/notifications/ keeps them.
+// (`Ui.Shot`).
 using Osysharp.Identity;
 using Osysharp.Notifications;
 using NotificationsKitTests;

@@ -124,7 +124,7 @@ void the_event_is_kept_by_its_class_and_said_when_read() {
   }
 }
 
-// F-WORDS1 — a sentence is said in the READER's words when it is read: Bo reads the same notification in Swedish.
+// A sentence is said in the READER's words when it is read: Bo reads the same notification in Swedish.
 [Test(Studio)]
 void a_sentence_is_said_in_the_readers_language() {
   runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
