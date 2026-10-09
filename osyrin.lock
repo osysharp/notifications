@@ -6,8 +6,8 @@
     {
       "name": "Osysharp.Clock",
       "kind": "package",
-      "version": "0.1.0",
-      "hash": "sha256:f682be329857e698e826c270ebe433ef152a3fb04ffd80d94ee15adc528af962",
+      "version": "0.1.1",
+      "hash": "sha256:bef673d926e24ce600f2c9a022cd65d2b875690a690a2fd636658da214cd39b0",
       "minPlatform": "0.9.0",
       "shadow": "app-forkable",
       "source": "workspace:kits/clock",
@@ -16,8 +16,8 @@
     {
       "name": "Osysharp.Ui",
       "kind": "package",
-      "version": "2.17.1",
-      "hash": "sha256:17d6d844ed71d4d614d43a6993723da70b2d39241c31e9f9fb58250a5183263c",
+      "version": "2.18.0",
+      "hash": "sha256:deccf5a06701c6af9cd880108de9426376c878130251be73adf1210cce94605b",
       "minPlatform": "0.9.0",
       "shadow": "app-forkable",
       "source": "workspace:Platform.Core/Dsl/OsySharp/Baseline/Capabilities/Ui"

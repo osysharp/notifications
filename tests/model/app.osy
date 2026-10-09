@@ -64,6 +64,12 @@ public void AskForARead(Draft d, Person to) {
   UnitOfWork.Commit();
 }
 
+/// Ask every one of `readers` for a read at once — the app's own `List<Person>`, handed straight to `NotifyAll`.
+public void AskEveryoneForARead(Draft d, List<Person> readers) {
+  NotifyAll(readers, new ReadAsked { Draft = d, By = Session.CurrentUser as Person }, by: Session.CurrentUser);
+  UnitOfWork.Commit();
+}
+
 /// Name `to` in a comment on draft `d` — a mention, in the kit's own words.
 public void MentionInAComment(Draft d, Person to) {
   Mention(to, d, by: Session.CurrentUser);

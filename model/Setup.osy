@@ -49,8 +49,9 @@ public void Notify(Principal to, Event e, Principal? by = null, string key = "",
   TellAbout(to, e, by, mention, key);
 }
 
-/// Tell each of `people` that `e` happened — `Notify` for every one of them, once each.
-public void NotifyAll(List<Principal> people, Event e, Principal? by = null) {
+/// Tell each of `people` that `e` happened — `Notify` for every one of them, once each. Any list of the app's people
+/// passes straight in (`List<Member>`, `Member[]`): an array parameter reads, so it accepts a list of a subtype.
+public void NotifyAll(Principal[] people, Event e, Principal? by = null) {
   List<Guid> told = [];
   foreach (var p in people) {
     if (told.Contains(p.Id)) { continue; }
