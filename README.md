@@ -24,7 +24,7 @@ public sealed class CustomerWrote {
 }
 
 [Title($"#{Number} · {Title}")] entity Ticket { … }                       // what a ticket is called
-[Page("/w/{view}/t/{number}")] [Opens(Ticket, view = "mine")] component TicketPage(…) { … }   // where it opens
+[Route("/w/{view}/t/{number}")] [Opens(Ticket, view = "mine")] component TicketPage(…) { … }   // where it opens
 
 Notify(rahul, new CustomerWrote { Ticket = ticket });           // about the record the event is about
 [On] void TellReviewers(ArticleSentForReview e) { NotifyAll(reviewers, e); }   // a kit's event, told as it is

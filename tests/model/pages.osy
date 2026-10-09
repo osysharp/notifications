@@ -6,7 +6,7 @@ using Osysharp.Notifications;
 // (`/settings/notifications`, generated from its declared row).
 
 [Title("Drafts")]
-[Page("/")]
+[Route("/")]
 [Authorize(IsWriter)]
 [Render(CSR)]
 component Drafts() {
@@ -29,7 +29,7 @@ component Drafts() {
 
 /// One draft — where a draft opens, so a notification about one links here.
 [Title("Draft")]
-[Page("/drafts/{id}")]
+[Route("/drafts/{id}")]
 [Opens(Draft)]
 [Authorize(IsWriter)]
 [Render(CSR)]

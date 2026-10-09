@@ -31,7 +31,7 @@
 // ⚑ THE APP SAYS ONE THING — who has a bell, and preferences:
 //     policy ReceivesNotifications => IsAgent;
 package Osysharp.Notifications {
-  version     "1.1.0";
+  version     "1.1.1";
   minPlatform "0.9.0";
   summary     "telling a person something needs them — a bell with a live count and a list (read and unread, mark all read), a daily mail digest of what they have not seen or a mention mailed at once (their own choice, in their own language), delivered durably after the commit, deduplicated while unread, and never about a record the recipient may not read under their own security.";
   model "model/**/*.osy";
