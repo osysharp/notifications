@@ -35,10 +35,15 @@ void a_notification_about_a_record_the_recipient_may_not_read_is_never_shown() {
     Assert.Equal("“Spring issue”", lines[0].Title);
     Assert.False(lines.Any(l => l.Title.Contains("Salary")));
   }
-  // The editor may read it, so the same notification reaches her.
-  runas (Bo) { AskForARead(DraftNamed("Salary memo"), PersonAt("ada@studio.test")); }
+  // An editor may read a private draft, so the same notification about one reaches her. (Asked by its writer: a person
+  // cannot hand on a draft they cannot read themselves — the call is refused before it runs.)
+  runas (Cy) {
+    new Draft { Title = "Pay review", Writer = PersonAt("cy@studio.test"), Private = true };
+    UnitOfWork.Commit();
+  }
+  runas (Cy) { AskForARead(DraftNamed("Pay review"), PersonAt("ada@studio.test")); }
   Background.Settle();
-  runas (Ada) { Assert.Equal("“Salary memo”", MyNotificationLines().Single().Title); }
+  runas (Ada) { Assert.Equal("“Pay review”", MyNotificationLines().Single().Title); }
 }
 
 // …and the read-time half: access lost after it was delivered takes it out of the bell, unnamed.
