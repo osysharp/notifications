@@ -3,7 +3,7 @@
 using Osysharp.Identity;
 using Osysharp.Mail;
 using Osysharp.Notifications;
-using Osysharp.Clock;
+using Osysharp.TimeZone;
 using NotificationsKitTests;
 
 /// What a mail said — copied out while it is read as the editor (a row read inside `runas` and used outside it is read

@@ -23,7 +23,7 @@ public class NotificationsSetup {
   /// How long a mention waits, unread, before it is mailed to somebody who asked for mentions at once — long enough
   /// that a person at their desk reads it in the app and gets no mail.
   public TimeSpan MentionMailAfter = TimeSpan.FromMinutes(5);
-  /// The hour the daily digest goes out on the app's clock (`Osysharp.Clock`, the time zone staff pick in Settings ›
+  /// The hour the daily digest goes out on the app's clock (`Osysharp.TimeZone`, the time zone staff pick in Settings ›
   /// Time and date) — the first hourly sweep at or after it, once a day.
   public int DigestHour = 6;
   /// What a person's mail says and in which language — override `LanguageOf` when the app keeps one on the account.

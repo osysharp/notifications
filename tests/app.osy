@@ -8,7 +8,7 @@ app NotificationsKitTests {
   use Osysharp.Notifications@1;
   use Osysharp.Mail@0;
   use Osysharp.EmailTemplates@0;
-  use Osysharp.Clock@0;
+  use Osysharp.TimeZone@0;
   use Osysharp.Workflow;
   use Osysharp.Ui;
 }

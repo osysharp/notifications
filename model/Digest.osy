@@ -4,7 +4,7 @@ using Osysharp.Identity;
 using Osysharp.Workflow;
 using Osysharp.Mail;
 using Osysharp.EmailTemplates;
-using Osysharp.Clock;
+using Osysharp.TimeZone;
 
 // ── the hourly sweep: the daily digest, and keeping no notification longer than it is needed ──────────────────────────
 
@@ -55,7 +55,7 @@ void SweepNotifications(DateTime now) {
 }
 
 /// Mail each person due one the unread notifications they have not been mailed — once a day, from `DigestHour` on the
-/// app's clock (`Osysharp.Clock`): the team's morning, wherever the server is, and in summer time as in winter.
+/// app's clock (`Osysharp.TimeZone`): the team's morning, wherever the server is, and in summer time as in winter.
 /// Answers how many digests went.
 int SendDigests(DateTime now) {
   var setup = App.Setting<NotificationsSetup>();
