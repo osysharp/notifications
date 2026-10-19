@@ -121,7 +121,9 @@ public class NotificationMailLine {
 /// mailed. Through the app's mail (Osysharp.Mail): it goes after the commit, and a mail it already sent is not sent again.
 void MailNotifications(Principal person, List<Notification> items, bool digest) {
   // Each mail names its recipient's language itself (`language =>`), whoever sends it — the sweep, as the system.
-  var mail = digest ? NotificationDigestMail(person, items) : NotificationMentionMail(person, items[0]);
+  // Asked of the app's `NotificationPeople`, so an app that writes its own mail is heard everywhere this one goes out.
+  var people = App.Setting<NotificationsSetup>().People;
+  var mail = digest ? people.DigestMail(person, items) : people.MentionMail(person, items[0]);
   var key = (digest ? "notifications-digest-" : "notifications-mention-") + person.Id.ToString() + "-" + items[0].Id.ToString();
   SendMail(new MailMessage { To = [person.Email], Subject = mail.Subject, Html = mail.Html, Text = mail.Text }, key);
   var now = DateTime.UtcNow;

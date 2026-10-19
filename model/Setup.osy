@@ -35,6 +35,10 @@ public class NotificationPeople {
   /// The language `person`'s mail is written in. The default: the one they last read the app in (their bell records
   /// it), else the app's own. An app that keeps a `[PreferredCulture]` on the account answers it here.
   public virtual string LanguageOf(Principal person) { return LastReadIn(person); }
+  /// The daily digest `person` is mailed, of the notifications `items`. Override to write it in the app's own words.
+  public virtual RenderedEmail DigestMail(Principal person, List<Notification> items) { return NotificationDigestMail(person, items); }
+  /// The single mention `person` is mailed about `item`. Override to write it in the app's own words.
+  public virtual RenderedEmail MentionMail(Principal person, Notification item) { return NotificationMentionMail(person, item); }
 }
 
 /// Tell `to` that `e` happened — any event, the app's own or a kit's, about any record the app keeps (its first record
