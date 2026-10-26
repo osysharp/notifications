@@ -60,3 +60,115 @@ NotificationBell();                                             // in the shell'
 The kit's test app is a small studio's shared drafts, so the kit is shown working outside a helpdesk; the
 [Harbour helpdesk](https://osyrin.com/templates/helpdesk/) uses it end to end. Who may read a notification is
 `osy docs stdlib-records`.
+
+## Examples
+
+Taken from this package's own tests, which compile and run on every release.
+
+```osy
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+[Test(Studio)]
+void a_request_for_a_read_reaches_the_bell_once_it_is_delivered() {
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  // Written, not yet delivered: nothing in Bo's bell.
+  runas (Bo) { Assert.Equal(0, UnreadNotifications()); }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(1, UnreadNotifications());
+    var line = MyNotificationLines().Single();
+    Assert.Equal("Ada Lindqvist asked you to read a draft.", line.Sentence);
+    Assert.Equal("“Spring issue”", line.Title);
+    Assert.Equal("Ada Lindqvist", line.By);
+    Assert.True(line.Link.StartsWith("/drafts/"));
+  }
+}
+```
+
+From [`tests/delivery.test.osy`](tests/delivery.test.osy).
+
+```osy
+using Osysharp.Identity;
+using Osysharp.Mail;
+using Osysharp.Notifications;
+using Osysharp.TimeZone;
+using NotificationsKitTests;
+
+[Test(Studio)]
+void the_digest_goes_out_in_the_teams_morning_on_the_apps_clock() {
+  // The studio works in Tokyo (UTC+9): 06:00 there is 21:00 UTC the evening before.
+  runas (Ada) {
+    new ClockSettings { TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
+    new Draft { Title = "Summer issue", Writer = Person.Single(p => p.Email == "ada@studio.test") };
+    UnitOfWork.Commit();
+  }
+  TestClock.Set(new DateTime(2030, 3, 3, 20, 0, 0));          // 05:00 on 4 March in Tokyo
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  Assert.Equal(0, MailTo("bo@studio.test").Count);
+
+  TestClock.Set(new DateTime(2030, 3, 3, 21, 30, 0));         // 06:30 in Tokyo — the morning, though UTC is still the 3rd
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+
+  // 06:30 UTC on the 4th is 15:30 the same day in Tokyo: one digest a day there, so nothing more.
+  runas (Ada) { AskForARead(DraftNamed("Summer issue"), PersonAt("bo@studio.test")); }
+  TestClock.Set(new DateTime(2030, 3, 4, 6, 30, 0));
+  Background.Settle();
+  Assert.Equal(1, MailTo("bo@studio.test").Count);
+
+  // The next morning in Tokyo, the new one goes.
+  TestClock.Set(new DateTime(2030, 3, 4, 21, 30, 0));
+  Background.Settle();
+  Assert.Equal(2, MailTo("bo@studio.test").Count);
+}
+```
+
+From [`tests/mail.test.osy`](tests/mail.test.osy).
+
+```osy
+using Osysharp.Identity;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+[Test(Studio)]
+void a_notification_about_a_record_the_recipient_may_not_read_is_never_shown() {
+  runas (Ada) {
+    AskForARead(DraftNamed("Salary memo"), PersonAt("bo@studio.test"));
+    // …and one Bo may read, so the settle below is shown to have delivered.
+    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+  }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(1, UnreadNotifications());
+    var lines = MyNotificationLines();
+    Assert.Equal(1, lines.Count);
+    Assert.Equal("“Spring issue”", lines[0].Title);
+    Assert.False(lines.Any(l => l.Title.Contains("Salary")));
+  }
+  // An editor may read a private draft, so the same notification about one reaches her. (Asked by its writer: a person
+  // cannot hand on a draft they cannot read themselves — the call is refused before it runs.)
+  runas (Cy) {
+    new Draft { Title = "Pay review", Writer = PersonAt("cy@studio.test"), Private = true };
+    UnitOfWork.Commit();
+  }
+  runas (Cy) { AskForARead(DraftNamed("Pay review"), PersonAt("ada@studio.test")); }
+  Background.Settle();
+  runas (Ada) { Assert.Equal("“Pay review”", MyNotificationLines().Single().Title); }
+}
+```
+
+From [`tests/delivery.test.osy`](tests/delivery.test.osy).
+
+## Learn more
+
+- [The Osysharp.Notifications reference](https://osysharp.com/reference/ui/notifications-kit/)
+- [Osysharp.Notifications in the package catalogue](https://osysharp.com/packages/#osysharp-notifications)
+- [The Osy# reference](https://osysharp.com/reference/) — the language, the runtime and every kit
+- [`llms-full.txt`](https://osysharp.com/llms-full.txt) — the whole reference and specification as one Markdown file, for a coding agent
+
+## Licence
+
+MIT — see [`LICENSE`](LICENSE).

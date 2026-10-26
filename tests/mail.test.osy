@@ -60,7 +60,7 @@ void what_was_not_read_is_mailed_in_one_digest_a_day() {
 void the_digest_goes_out_in_the_teams_morning_on_the_apps_clock() {
   // The studio works in Tokyo (UTC+9): 06:00 there is 21:00 UTC the evening before.
   runas (Ada) {
-    new ClockSettings { TimeZone = Zone.Of("Asia/Tokyo") };
+    new ClockSettings { TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo") };
     new Draft { Title = "Summer issue", Writer = Person.Single(p => p.Email == "ada@studio.test") };
     UnitOfWork.Commit();
   }
