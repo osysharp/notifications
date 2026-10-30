@@ -160,10 +160,14 @@ NotificationState Deliver(Notification n) {
     open.By = n.By;
     if (n.Mention) { open.Mention = true; }
     n.Problem = "Joined the unread one about the same thing.";
+    // It happened again: the channels tell them again, about the one in their bell.
+    QueueChannelSends(open);
     return NotificationState.Merged;
   }
   n.Visible = true;
   n.OpenKey = n.Key;
+  // In their bell — and, at once, on each of the app's channels (`NotificationChannelDelivery`, after this commit).
+  QueueChannelSends(n);
   if (n.Mention && MailOf(n.Recipient) == NotificationMail.MentionsAtOnce) { return NotificationState.MailDue; }
   return NotificationState.Shown;
 }

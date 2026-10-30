@@ -28,6 +28,13 @@ public class NotificationsSetup {
   public int DigestHour = 6;
   /// What a person's mail says and in which language — override `LanguageOf` when the app keeps one on the account.
   public NotificationPeople People = new NotificationPeople();
+  /// The ways, beside the bell and mail, a person is told AT ONCE — each one an `INotificationChannel`, its own key.
+  /// The kit's own: `new WebPushChannel { … }`, to the browsers a person allowed to notify them. None by default.
+  public List<INotificationChannel> Channels = [];
+  /// How many times a channel is tried before it is given up on — a push service that is down is tried again.
+  public int ChannelAttempts = 5;
+  /// The wait after a channel's first refused try; it doubles after each, never past an hour.
+  public TimeSpan ChannelRetryAfter = TimeSpan.FromMinutes(1);
 }
 
 /// What the kit asks the app about the people it tells. The defaults need nothing from the app.
@@ -108,10 +115,11 @@ public enum NotificationMail {
 /// `/settings/notifications`.
 [Settings("Notifications", Authorize = ReceivesNotifications, Owner = Person, Route = "/settings/notifications",
           Group = "You", Order = 10, Icon = Icons.Bell,
-          Hint = "What is mailed to you when you have not seen it here.",
-          Description = "The bell shows everything as it happens. These are yours alone: what is mailed to you when you have not read it in the app.",
+          Hint = "What is pushed and mailed to you.",
+          Description = "The bell shows everything as it happens. These are yours alone: what is pushed to your devices at once, and what is mailed to you when you have not read it in the app.",
           Saved = "Your notification preferences are saved.")]
 [SettingsGroup("Mail", "Mail is only ever about what you have not read here. Mail goes to the address you sign in with.")]
+[SettingsGroup("Push", "Sent at once to each browser or phone where you allowed notifications. It says only that something is waiting; it opens here.")]
 // The app's privacy desk reads them to answer a person's request (Osysharp.Privacy.Notifications) — its grant:
 // `partial entity NotificationPreferences { security { allow read when ManagesPrivacy; } }`.
 [Authority(Extensible)]
@@ -120,6 +128,8 @@ public entity NotificationPreferences {
   [Required] Principal Person;
   [Setting("Mail me", Group = "Mail", Hint = "A mention waits a few minutes first — read it here and no mail is sent.")]
   NotificationMail Mail = NotificationMail.MentionsAtOnce;
+  [Setting("Push to my devices", Group = "Push", Hint = "Only to the browsers and phones where you turned notifications on.")]
+  NotificationPush Push = NotificationPush.Everything;
   /// The language they last read the app in — what their mail is written in (`NotificationPeople.LanguageOf`).
   [MaxLength(20)] string Language = "";
   /// When their last daily digest went.
@@ -136,6 +146,13 @@ public entity NotificationPreferences {
 public NotificationMail MailOf(Principal person) {
   var mine = NotificationPreferences.FirstOrDefault(p => p.Person == person);
   return mine == null ? NotificationMail.MentionsAtOnce : mine.Mail;
+}
+
+/// What `person` wants pushed — their row's choice, or everything when they never opened the page: allowing a browser
+/// to notify them was the asking.
+public NotificationPush PushOf(Principal person) {
+  var mine = NotificationPreferences.FirstOrDefault(p => p.Person == person);
+  return mine == null ? NotificationPush.Everything : mine.Push;
 }
 
 /// The language `person` last read the app in — "" when the app never saw them read it.

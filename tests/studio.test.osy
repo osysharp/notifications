@@ -17,6 +17,21 @@ void Studio() {
   new RoleGrant { Member = dee, Role = StudioRole.Writer };
   new Draft { Title = "Spring issue", Writer = ada };
   new Draft { Title = "Salary memo", Writer = ada, Private = true };
+  // The studio's VAPID private key — a test's own, made for these tests and nothing else. Its public half is the
+  // channel's `PublicKey` (tests/model/app.osy), and `StudioPushPublicPem` below.
+  Secret.StudioPushKey.Stub("-----BEGIN PRIVATE KEY-----\n"
+    + "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgLRt/5m6AqzAFWtAg\n"
+    + "IOYktxJ6dTDA/B4xts2stsnE6SChRANCAASsgVoN7T0c2vgHOQqTtnpM/mXR7jn6\n"
+    + "v+AY7+MhimY/PQ4bES4p1sw1+43y0ORu4vGqcM/cZ3Y+pkh2Jms93nNO\n"
+    + "-----END PRIVATE KEY-----\n");
+}
+
+/// The public half of the studio's VAPID key, as PEM — what a push service checks a push's token with.
+string StudioPushPublicPem() {
+  return "-----BEGIN PUBLIC KEY-----\n"
+    + "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErIFaDe09HNr4BzkKk7Z6TP5l0e45\n"
+    + "+r/gGO/jIYpmPz0OGxEuKdbMNfuN8tDkbuLxqnDP3Gd2PqZIdiZrPd5zTg==\n"
+    + "-----END PUBLIC KEY-----\n";
 }
 
 principal Ada => Person.Single(p => p.Email == "ada@studio.test");

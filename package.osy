@@ -28,12 +28,16 @@
 //   `Sentence()` when it is read — the bell in the reader's language, the mail in the recipient's — with the event's
 //   records read as the reader may read them.
 //
+// ⚑ AT ONCE, BESIDE THE BELL (1.3.0): the app's channels (`NotificationsSetup.Channels`, model/Channels.osy) tell a
+//   person the moment it is in their bell — the kit's own is Web Push (model/WebPush.osy), to each browser they allowed,
+//   saying only that something is waiting; what is pushed is each person's own setting.
+//
 // ⚑ THE APP SAYS ONE THING — who has a bell, and preferences:
 //     policy ReceivesNotifications => IsAgent;
 package Osysharp.Notifications {
-  version "1.2.0";
-  minPlatform "0.14.0";
-  summary     "telling a person something needs them — a bell with a live count and a list (read and unread, mark all read), a daily mail digest of what they have not seen or a mention mailed at once (their own choice, in their own language), delivered durably after the commit, deduplicated while unread, and never about a record the recipient may not read under their own security.";
+  version "1.3.0";
+  minPlatform "0.17.0";
+  summary     "telling a person something needs them — a bell with a live count and a list (read and unread, mark all read), a push to their phone or browser at once (Web Push, VAPID) and a daily mail digest of what they have not seen or a mention mailed at once (their own choices, in their own language), delivered durably after the commit, deduplicated while unread, and never about a record the recipient may not read under their own security.";
   model "model/**/*.osy";
   // The personal data its own fields hold (`[Classification(Personal.X)]`): what happened, which can name people.
   personal Content;
@@ -47,5 +51,10 @@ package Osysharp.Notifications {
   use Osysharp.TimeZone@0;
   // The bell, the list and the preferences page — themed by the app.
   use Osysharp.Ui;
+  // Web Push posts to the push service each browser names (Google's, Mozilla's, Apple's…): the app grants the ones it
+  // reaches — `use Osysharp.Notifications@1 { egress "fcm.googleapis.com"; egress "*.push.apple.com"; … }`. An app that
+  // grants none, and names no channel, reaches nothing.
+  use Osysharp.Http;
+  egress consumer;
   tests "tests";
 }

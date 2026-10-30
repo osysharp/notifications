@@ -1,0 +1,164 @@
+// Web Push: a notification reaches each browser its recipient allowed the moment it is in their bell — never one about
+// a record they may not read, and only what their own settings push. `Http.Post.Stub` stands in for the push services:
+// it keeps each push it was sent, and answers as a service does.
+using Osysharp.Identity;
+using Osysharp.Http;
+using Osysharp.Mail;
+using Osysharp.Notifications;
+using NotificationsKitTests;
+
+const string BoPhone = "https://fcm.googleapis.com/fcm/send/bo-phone-1";
+
+/// The push services take every push (201 Created), keeping each.
+void PushServicesTakeEverything() {
+  Http.Post.Stub((url, body, headers) => {
+    new PushSent { Url = url, Body = body, Authorization = headers["Authorization"], Urgency = headers["Urgency"],
+                   Topic = headers["Topic"], Ttl = headers["TTL"] };
+    return new HttpResponse { StatusCode = 201, Body = "" };
+  });
+}
+
+/// The push services are down: every push is refused (503), and none kept.
+void PushServicesAreDown() {
+  Http.Post.Stub((url, body, headers) => new HttpResponse { StatusCode = 503, Body = "unavailable" });
+}
+
+string Base64UrlDecoded(string part) {
+  var b64 = part.Replace("-", "+").Replace("_", "/");
+  while (b64.Length % 4 != 0) { b64 = b64 + "="; }
+  return Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+}
+
+byte[] Base64UrlBytes(string part) {
+  var b64 = part.Replace("-", "+").Replace("_", "/");
+  while (b64.Length % 4 != 0) { b64 = b64 + "="; }
+  return Convert.FromBase64String(b64);
+}
+
+// SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read) — the channel half.
+[Test(Studio)]
+void a_push_subscription_receives_an_immediate_notification_and_not_one_it_may_not_read() {
+  PushServicesTakeEverything();
+  runas (Bo) {
+    Assert.Equal("BKyBWg3tPRza-Ac5CpO2ekz-ZdHuOfq_4Bjv4yGKZj89DhsRLinWzDX7jfLQ5G7i8apwz9xndj6mSHYmaz3ec04", PushPublicKey());
+    SubscribeToPush(BoPhone, "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM", "tBHItJI5svbpez7KI4CCXg");
+    // The same browser again is the same subscription; and nobody reads its endpoint back, its owner included.
+    SubscribeToPush(BoPhone, "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM", "tBHItJI5svbpez7KI4CCXg");
+    var mine = PushSubscription.Single();
+    Assert.Equal("fcm.googleapis.com", mine.Host);
+    Assert.DoesNotContain("bo-phone", mine.SealedEndpoint ?? "");
+  }
+
+  runas (Ada) {
+    AskForARead(DraftNamed("Salary memo"), PersonAt("bo@studio.test"));
+    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+  }
+  Background.Settle();
+
+  // One push — about the draft Bo may read — at once, to his phone's push service. It carries nothing.
+  var pushed = PushSent.Single();
+  Assert.Equal(BoPhone, pushed.Url);
+  Assert.Equal("", pushed.Body);
+  Assert.Equal("normal", pushed.Urgency);
+  Assert.Equal("43200", pushed.Ttl);
+  Assert.Equal(32, pushed.Topic.Length);
+  // VAPID: a token for this push service, from the studio, signed with its key; and the key browsers subscribed with.
+  Assert.True(pushed.Authorization.StartsWith("vapid t="));
+  Assert.True(pushed.Authorization.EndsWith(", k=BKyBWg3tPRza-Ac5CpO2ekz-ZdHuOfq_4Bjv4yGKZj89DhsRLinWzDX7jfLQ5G7i8apwz9xndj6mSHYmaz3ec04"));
+  var token = pushed.Authorization.Substring(8, pushed.Authorization.IndexOf(",") - 8);
+  var parts = token.Split('.');
+  Assert.Equal(3, parts.Length);
+  Assert.Contains("\"alg\":\"ES256\"", Base64UrlDecoded(parts[0]));
+  Assert.Contains("\"aud\":\"https://fcm.googleapis.com\"", Base64UrlDecoded(parts[1]));
+  Assert.Contains("\"sub\":\"mailto:desk@studio.test\"", Base64UrlDecoded(parts[1]));
+  Assert.True(Crypto.VerifyEs256(StudioPushPublicPem(), Text.ToBytes(parts[0] + "." + parts[1]), Base64UrlBytes(parts[2])));
+  // What the woken browser shows is asked for as Bo: the draft he may read, and nothing about the other.
+  runas (Bo) {
+    var lines = UnreadNotificationLines();
+    Assert.Equal(1, lines.Count);
+    Assert.Equal("“Spring issue”", lines[0].Title);
+  }
+
+  // A push the service refused waits to be tried again — and access lost meanwhile ends it unsent: the try asks again.
+  runas (Ada) {
+    new Draft { Title = "Autumn issue", Writer = PersonAt("ada@studio.test") };
+    UnitOfWork.Commit();
+  }
+  PushServicesAreDown();
+  runas (Ada) { AskForARead(DraftNamed("Autumn issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Ada) {
+    var autumn = Draft.Single(d => d.Title == "Autumn issue");
+    autumn.Private = true;
+    UnitOfWork.Commit();
+  }
+  PushServicesTakeEverything();
+  TestClock.Set(DateTime.UtcNow.AddMinutes(30));
+  Background.Settle();
+  Assert.Equal(1, PushSent.Count());
+  runas (Bo) {
+    var send = NotificationSend.Single(s => s.State != NotificationSendState.Sent);
+    Assert.Equal(1, send.Attempts);
+    Assert.Equal(NotificationSendState.NotSent, send.State);
+    Assert.Equal("They may not read what it is about.", send.Problem);
+  }
+}
+
+[Test(Studio)]
+void a_person_who_turned_push_off_gets_mail_only() {
+  PushServicesTakeEverything();
+  runas (Bo) {
+    SubscribeToPush(BoPhone);
+    new NotificationPreferences { Person = PersonAt("bo@studio.test"), Push = NotificationPush.Off,
+                                  Mail = NotificationMail.MentionsAtOnce };
+    UnitOfWork.Commit();
+  }
+  var start = DateTime.UtcNow;
+  runas (Cy) { MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  // In his bell, and pushed nowhere.
+  runas (Bo) { Assert.Equal(2, UnreadNotifications()); }
+  Assert.Equal(0, PushSent.Count());
+
+  // The mention, still unread when its wait is over, is mailed — as his mail setting says.
+  TestClock.Set(start.AddMinutes(6));
+  Background.Settle();
+  Assert.Equal(0, PushSent.Count());
+  runas (Ada) {
+    var mailed = OutgoingMail.Where(m => m.To == "bo@studio.test").ToList();
+    Assert.Equal(1, mailed.Count);
+    Assert.Equal("Cy Holm mentioned you in Studio", mailed[0].Subject);
+  }
+
+  // Turned on for mentions only: the next mention is pushed, at once and urgent; a request for a read is not.
+  runas (Bo) {
+    NotificationPreferences.Single().Push = NotificationPush.Mentions;
+    MarkAllNotificationsRead();
+  }
+  runas (Ada) {
+    MentionInAComment(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
+  }
+  Background.Settle();
+  Assert.Equal("high", PushSent.Single().Urgency);
+}
+
+// A browser its push service says is gone (410) is dropped, and nothing waits on it.
+[Test(Studio)]
+void a_browser_its_push_service_says_is_gone_is_dropped() {
+  Http.Post.Stub((url, body, headers) => new HttpResponse { StatusCode = 410, Body = "" });
+  runas (Bo) { SubscribeToPush(BoPhone); }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
+  Background.Settle();
+  runas (Bo) {
+    Assert.Equal(0, PushSubscription.Count());
+    Assert.Equal(NotificationSendState.Sent, NotificationSend.Single().State);
+    // Nobody else's: Cy cannot add a browser for Bo, nor see Bo's.
+  }
+  runas (Cy) {
+    var bo = PersonAt("bo@studio.test");
+    Assert.Denied(() => new PushSubscription { Person = bo, EndpointHash = "x", SealedEndpoint = "x", Host = "x" });
+    Assert.Equal(0, NotificationSend.Count());
+  }
+}

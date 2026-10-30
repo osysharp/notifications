@@ -41,7 +41,23 @@ entity Draft {
   }
 }
 
-app.Notifications = new NotificationsSetup { AppName = "Studio" };
+// The studio pushes to its writers' browsers: its VAPID key pair — the private half a secret, the public half what a
+// browser subscribes with.
+app.Secrets = [ new Secret("StudioPushKey") ];
+app.Notifications = new NotificationsSetup { AppName = "Studio", Channels = [
+  new WebPushChannel { PublicKey = "BKyBWg3tPRza-Ac5CpO2ekz-ZdHuOfq_4Bjv4yGKZj89DhsRLinWzDX7jfLQ5G7i8apwz9xndj6mSHYmaz3ec04",
+                       PrivateKey = Secret.StudioPushKey, Subject = "mailto:desk@studio.test" } ] };
+
+/// One push a push service was sent — kept by the tests' `Http.Post.Stub`, which stands in for the service.
+entity PushSent {
+  [MaxLength(2000)] string Url = "";
+  [MaxLength(2000)] string Authorization = "";
+  [MaxLength(40)] string Urgency = "";
+  [MaxLength(40)] string Topic = "";
+  [MaxLength(40)] string Ttl = "";
+  string Body = "";
+  security { allow read, create when IsAuthenticated || IsAnonymous; }
+}
 
 /// Somebody asked for a read of a draft — said in the reader's words, when the notification is read.
 [Event("Read asked")]

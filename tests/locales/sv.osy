@@ -205,7 +205,7 @@ translations sv {
   // ── Osysharp.Notifications · NotificationPreferencesEditor ──
   /// NotificationPreferencesEditor · a description
   /// shown through SettingsPage.description
-  description "The bell shows everything as it happens. These are yours alone: what is mailed to you when you have not read it in the app." => "Klockan visar allt när det händer. De här inställningarna är bara dina: vad som mejlas till dig när du inte har läst det i appen.";
+  description "The bell shows everything as it happens. These are yours alone: what is pushed to your devices at once, and what is mailed to you when you have not read it in the app." => "Klockan visar allt när det händer. De här inställningarna är bara dina: vad som skickas till dina enheter direkt, och vad som mejlas till dig när du inte har läst det i appen.";
   /// NotificationPreferencesEditor · text on the page
   /// shown through SaveBar.saved
   text "Your notification preferences are saved." => "Dina aviseringsinställningar är sparade.";
@@ -227,6 +227,18 @@ translations sv {
   /// NotificationPreferencesFields · a title
   /// shown through SettingsSection.title
   title "Mail" => "Mejl";
+  /// NotificationPreferencesFields · a description
+  /// shown through SettingsSection.description
+  description "Sent at once to each browser or phone where you allowed notifications. It says only that something is waiting; it opens here." => "Skickas direkt till varje webbläsare eller telefon där du har tillåtit aviseringar. Den säger bara att något väntar; den öppnas här.";
+  /// NotificationPreferencesFields · a hint under a field
+  /// shown through SettingRow.hint
+  hint "Only to the browsers and phones where you turned notifications on." => "Bara till webbläsare och telefoner där du har slagit på aviseringar.";
+  /// NotificationPreferencesFields · a label (a field, a list item, a menu entry)
+  /// shown through Dropdown.label
+  label "Push to my devices" => "Skicka till mina enheter";
+  /// NotificationPreferencesFields · a title
+  /// shown through SettingsSection.title
+  title "Push" => "Push";
 
   // ── Osysharp.Notifications · NotificationRow ──
   /// NotificationRow · a control's name for screen readers
@@ -253,6 +265,28 @@ translations sv {
   /// shown through Osysharp.Notifications.NotificationMail.Off
   /// beside: "Mentions at once, everything else in a daily digest", "A daily digest of what I have not seen"
   label "Nothing — I read them in the app" => "Inget, jag läser dem i appen";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.NotificationPush ──
+  /// Osysharp.Notifications.NotificationPush · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationPush.Everything
+  label "Everything, as it happens" => "Allt, när det händer";
+  /// Osysharp.Notifications.NotificationPush · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationPush.Mentions
+  label "Only when somebody mentions me" => "Bara när någon nämner mig";
+  /// Osysharp.Notifications.NotificationPush · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationPush.Off
+  label "Nothing" => "Inget";
+
+  // ── Osysharp.Notifications · Osysharp.Notifications.NotificationSendState ──
+  /// Osysharp.Notifications.NotificationSendState · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationSendState.Retrying
+  label "Trying again" => "Försöker igen";
+  /// Osysharp.Notifications.NotificationSendState · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationSendState.NotSent
+  label "Not sent" => "Skickades inte";
+  /// Osysharp.Notifications.NotificationSendState · a label (a field, a list item, a menu entry)
+  /// shown through Osysharp.Notifications.NotificationSendState.Failed
+  label "Failed" => "Misslyckades";
 
   // ── Osysharp.Notifications · Osysharp.Notifications.NotificationState ──
   /// Osysharp.Notifications.NotificationState · a label (a field, a list item, a menu entry) · at most ~28 characters
@@ -293,7 +327,7 @@ translations sv {
   heading "You" => "Du";
   /// Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections · a hint under a field
   /// shown through SettingsLink.Hint
-  hint "What is mailed to you when you have not seen it here." => "Vad som mejlas till dig när du inte har sett det här.";
+  hint "What is pushed and mailed to you." => "Vad som skickas och mejlas till dig.";
   /// Osysharp.Notifications.__Settings_NotificationPreferences_Section.Sections · a label (a field, a list item, a menu entry) · at most ~19 characters
   /// shown through SettingsLink.Label
   label "Notifications" => "Aviseringar";

@@ -1,0 +1,178 @@
+namespace Osysharp.Notifications;
+
+using Osysharp.Identity;
+using Osysharp.Workflow;
+
+// ── the ways, beside the bell and mail, a person is told at once ──────────────────────────────────────────────────────
+//
+// The bell is always there and mail waits for what was not read; a CHANNEL tells a person the moment a notification is
+// in their bell — a push to their phone, a chat message. The app names its channels in `NotificationsSetup.Channels`;
+// the kit's own is `WebPushChannel`, and an adapter package writes another as a class over `INotificationChannel`.
+//
+// ⚑ ONE SEND PER NOTIFICATION AND CHANNEL. Each notification that reaches a bell writes a `NotificationSend` for each
+//   channel, delivered by its own workflow after the delivery's commit — so a push service that is down is tried
+//   again without the bell being delivered twice, and one channel's trouble is nobody else's.
+//
+// ⚑ EVERY TRY ASKS AGAIN, of the record as stored and under the recipient's own rules, whether they may read what it is
+//   about — a send can wait an hour for a push service, and access lost meanwhile ends it unsent. Then the person's own
+//   settings (`Wants`), then the channel. SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read).
+
+/// A way to tell a person at once. Implement it in an adapter package; name instances in `NotificationsSetup.Channels`.
+public interface INotificationChannel {
+  /// Stable, and written on every send — "push". Never renamed.
+  string Key { get; }
+  /// Can it send right now — its keys and settings set? One that is not ready sends nothing, and nothing waits on it.
+  bool IsReady();
+  /// Tell `person` that `n` is in their bell. Throw to be tried again (`ChannelAttempts`, waits doubling);
+  /// `idempotencyKey` is the same on every try of one send.
+  ///
+  /// ⚠ The channel is handed the notification, not its words, and is asked as the system. A channel that carries the
+  ///   sentence or the record's title off the app must say them AS ITS RECIPIENT would read them; the kit's own Web Push
+  ///   carries neither — the browser fetches them, signed in as its person.
+  void Send(Principal person, Notification n, string idempotencyKey);
+
+  // ── added with defaults: an adapter that omits them keeps compiling ──
+  /// Does `person` want `n` sent this way — their own settings. Everything, by default.
+  bool Wants(Principal person, Notification n) => true;
+  /// Has `person` anywhere it reaches — a browser they subscribed, a number they gave? Nobody it cannot reach gets a
+  /// send. Everybody, by default.
+  bool Reaches(Principal person) => true;
+}
+
+/// Where one send stands. ⚠ Appended, never inserted: an enum is stored by position.
+public enum NotificationSendState {
+  /// Written with the notification's delivery; sent once that has gone.
+  [Label("Waiting")] Queued,
+  /// Refused by the channel; waiting before the next try.
+  [Label("Trying again")] Retrying,
+  [Label("Sent")] Sent,
+  /// Not sent, and never will be — why is on it.
+  [Label("Not sent")] NotSent,
+  /// Refused on every try.
+  [Label("Failed")] Failed,
+}
+
+/// One notification told on one channel — written by the delivery, sent by `NotificationChannelDelivery`. Its recipient
+/// may see what became of it; nobody writes it but the kit.
+public entity NotificationSend {
+  /// What it tells — and it goes with it.
+  [Required] Notification Notification;
+  /// Who is told — the notification's recipient.
+  [Required] Principal Recipient;
+  /// The channel's `Key`.
+  [Required, MaxLength(40)] string Channel;
+  int Attempts;
+  DateTime? SentAt;
+  /// Why it was not sent, or the last try's refusal.
+  [MaxLength(300)] string? Problem;
+  NotificationSendState State;                      // no default — NotificationChannelDelivery owns it
+  security {
+    allow read when IsAuthenticated where Recipient == user;
+    deny create;
+    deny update;
+    deny delete;
+  }
+}
+
+/// Sends each `NotificationSend` after the commit that wrote it, tries again with doubling waits, and gives up in the
+/// end.
+public workflow NotificationChannelDelivery {
+  Tracks    = NotificationSend.State;
+  Autostart = true;
+  Initial   = Queued;
+
+  state Queued {
+    Expire { Within = TimeSpan.Zero; Accrues = false; }
+    on Expire {
+      var decided = SendOnChannel(this.Item);
+      if (decided == NotificationSendState.Sent) { goto Sent; }
+      if (decided == NotificationSendState.NotSent) { goto NotSent; }
+      if (decided == NotificationSendState.Failed) { goto Failed; }
+      goto Retrying;
+    }
+  }
+
+  state Retrying {
+    Expire { Within = ChannelWaitAfter(this.Item.Attempts); Accrues = false; }
+    on Expire { goto Queued; }
+  }
+
+  terminal success Sent { }
+  terminal cancel NotSent { }
+  terminal cancel Failed { }
+}
+
+/// A send for each channel that is ready — what the delivery writes for a notification that reached `n`'s bell.
+void QueueChannelSends(Notification n) {
+  foreach (var channel in App.Setting<NotificationsSetup>().Channels) {
+    if (!channel.IsReady() || !channel.Reaches(n.Recipient)) { continue; }
+    new NotificationSend { Notification = n, Recipient = n.Recipient, Channel = channel.Key };
+  }
+}
+
+/// The app's channel called `key`, or none.
+public INotificationChannel? NotificationChannelNamed(string key) {
+  return App.Setting<NotificationsSetup>().Channels.FirstOrDefault(c => c.Key == key);
+}
+
+/// One try of `s` — what becomes of it, written on it.
+NotificationSendState SendOnChannel(NotificationSend s) {
+  var n = s.Notification;
+  var channel = NotificationChannelNamed(s.Channel);
+  if (channel == null || !channel!.IsReady()) {
+    s.Problem = $"The app has no “{s.Channel}” channel ready.";
+    return NotificationSendState.NotSent;
+  }
+  if (!n.Visible || n.Lost || n.ReadAt != null) {
+    s.Problem = "It was read, or left the bell, before it was sent.";
+    return NotificationSendState.NotSent;
+  }
+  if (!n.Recipient.IsActive) {
+    s.Problem = "Their account is switched off.";
+    return NotificationSendState.NotSent;
+  }
+  // SECURITY-INVARIANT(notifications-only-about-what-the-recipient-may-read) — the channel half: asked at every try, of
+  // the record as stored, under the recipient's own rules. A send that waited for a push service while the recipient
+  // lost access is never made. Guarded by tests/push.test.osy
+  // `a_push_subscription_receives_an_immediate_notification_and_not_one_it_may_not_read`.
+  if (!Records.MayRead(n.Recipient, n.About)) {
+    s.Problem = "They may not read what it is about.";
+    return NotificationSendState.NotSent;
+  }
+  if (!channel!.Wants(n.Recipient, n)) {
+    s.Problem = "Their own settings do not send it this way.";
+    return NotificationSendState.NotSent;
+  }
+  if (!channel!.Reaches(n.Recipient)) {
+    s.Problem = "It no longer reaches them.";
+    return NotificationSendState.NotSent;
+  }
+  s.Attempts = s.Attempts + 1;
+  try {
+    channel!.Send(n.Recipient, n, "notification-send-" + s.Id.ToString());
+  } catch (Exception ex) {
+    s.Problem = Clipped(ex.Message, 300);
+    Log.Warning("Notification channel {Channel}: try {Attempt} refused — {Problem}", s.Channel, s.Attempts, s.Problem);
+    return s.Attempts >= App.Setting<NotificationsSetup>().ChannelAttempts ? NotificationSendState.Failed
+                                                                            : NotificationSendState.Retrying;
+  }
+  s.Problem = null;
+  s.SentAt = DateTime.UtcNow;
+  return NotificationSendState.Sent;
+}
+
+/// The wait after `attempts` refused tries: `ChannelRetryAfter`, doubling, never more than an hour.
+public TimeSpan ChannelWaitAfter(int attempts) {
+  var longest = TimeSpan.FromHours(1);
+  var wait = App.Setting<NotificationsSetup>().ChannelRetryAfter;
+  for (var i = 1; i < attempts; i = i + 1) {
+    wait = wait + wait;
+    if (wait >= longest) { return longest; }
+  }
+  return wait;
+}
+
+/// `text`, cut to `max` characters.
+string Clipped(string text, int max) {
+  return text.Length > max ? text.Substring(0, max - 1) + "…" : text;
+}

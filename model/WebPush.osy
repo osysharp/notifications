@@ -1,0 +1,210 @@
+namespace Osysharp.Notifications;
+
+using Osysharp.Identity;
+
+// ── Web Push: the browsers a person allowed, told at once ─────────────────────────────────────────────────────────────
+//
+// A person's browser (a phone's too, added to its home screen) subscribes with the app's public VAPID key and hands the
+// app its subscription — `SubscribeToPush(endpoint, p256dh, auth)`. From then on each notification that reaches their
+// bell is pushed to every browser they subscribed, if their own settings say so (`NotificationPreferences.Push`).
+//
+//     app.Notifications = new NotificationsSetup { AppName = "Harbour", Channels = [
+//       new WebPushChannel { PublicKey = "BKyBWg3t…", PrivateKey = Secret.VapidKey, Subject = "mailto:ops@harbour.example" } ] };
+//
+// ⚑ THE PUSH SAYS NOTHING. It carries no payload — no sentence, no title, no record — only that something is waiting:
+//   the browser's service worker asks the app for the person's unread lines (`UnreadNotificationLines`), signed in as
+//   them, so what is shown is read under their own rules at the moment it is shown, and nothing about a record ever
+//   passes through Google's, Mozilla's or Apple's push service. Its `Topic` is the notification's key, so a push still
+//   waiting at the service is replaced by the next about the same thing rather than queued beside it.
+//
+// ⚑ THE ENDPOINT IS A CREDENTIAL — whoever holds it can wake that browser — so it is sealed with the app's own key
+//   (`Crypto.Encrypt`), and only its hash is compared. A push service that says it is gone (404, 410) drops it.
+//
+// The contract a browser keeps is Docs/reference/ui/notifications-web-push.md.
+
+/// What a person wants pushed to their devices. ⚠ Appended, never inserted: an enum is stored by position.
+public enum NotificationPush {
+  [Label("Everything, as it happens")] Everything,
+  [Label("Only when somebody mentions me")] Mentions,
+  [Label("Nothing")] Off,
+}
+
+/// One browser a person allowed to notify them — its push subscription, made by `SubscribeToPush`.
+///
+/// SECURITY-INVARIANT(push-subscriptions-are-their-persons-own): a person adds and removes only their own, and nobody —
+/// themselves included — reads the endpoint or its keys back: the kit's push is the only thing that opens them.
+[Unique(Person, EndpointHash)]
+public entity PushSubscription {
+  /// Whose browser it is.
+  [Required] Principal Person;
+  /// SHA-256 of the endpoint, in hex — how a subscription is found again without opening any.
+  [Required, MaxLength(64)] string EndpointHash;
+  /// The push service's address for this browser (`PushSubscription.endpoint`), sealed.
+  [Required, MaxLength(4000), Classification(Personal.Content)] string SealedEndpoint;
+  /// The browser's `p256dh` and `auth` keys, sealed — kept for a push that carries a payload; this one carries none.
+  [MaxLength(4000), Classification(Personal.Content)] string SealedKeys = "";
+  /// The push service's host ("fcm.googleapis.com") — what a person sees of it, and what a problem names.
+  [Required, MaxLength(255)] string Host;
+  DateTime At;
+  DateTime? LastPushedAt;
+  /// The push service's last refusal.
+  [MaxLength(300)] string? Problem;
+  security {
+    allow read, create, delete when ReceivesNotifications where Person == user;
+    deny read SealedEndpoint, SealedKeys;
+    deny update;
+  }
+}
+
+/// The kit's Web Push channel — name it in `NotificationsSetup.Channels`. VAPID (RFC 8292) identifies the app to every
+/// push service with one key pair: `PublicKey` is what browsers subscribe with, `PrivateKey` signs each push.
+public class WebPushChannel : INotificationChannel {
+  public string Key { get; } = "push";
+  /// The VAPID public key as browsers take it (`applicationServerKey`): the uncompressed P-256 point, base64url.
+  public string PublicKey = "";
+  /// The VAPID private key, PEM (PKCS#8 or SEC1) — from a secret: `PrivateKey = Secret.VapidKey`.
+  public string PrivateKey = "";
+  /// Who the push services may reach about the app: "mailto:ops@…" or an https address.
+  public string Subject = "";
+  /// How long a push service keeps a push for a browser that is offline.
+  public TimeSpan TimeToLive = TimeSpan.FromHours(12);
+
+  public bool IsReady() {
+    return PublicKey != "" && PrivateKey != "" && (Subject.StartsWith("mailto:") || Subject.StartsWith("https://"));
+  }
+
+  /// Somewhere to push: a browser they subscribed.
+  public bool Reaches(Principal person) {
+    return PushSubscription.Any(s => s.Person == person);
+  }
+
+  /// Their own choice — everything, mentions only, or nothing.
+  public bool Wants(Principal person, Notification n) {
+    var push = PushOf(person);
+    if (push == NotificationPush.Off) { return false; }
+    if (push == NotificationPush.Mentions) { return n.Mention; }
+    return true;
+  }
+
+  /// One push to each of their browsers; a refusal by any is thrown after all were tried, to be tried again.
+  public void Send(Principal person, Notification n, string idempotencyKey) {
+    List<string> refused = [];
+    foreach (var s in PushSubscription.Where(x => x.Person == person).ToList()) {
+      var why = PushTo(this, s, n);
+      if (why != "") { refused.Add(why); }
+    }
+    if (refused.Count > 0) { throw new ExternalServiceException(string.Join(" ", refused)); }
+  }
+}
+
+/// Push `n` to the browser `s` — "" when the push service took it (or said the browser is gone), else why not.
+///
+/// ⚠ A NON-2XX IS DATA, NOT AN EXCEPTION (`Http.*`); a transport failure throws, and is the other half.
+[SuppressWarning("reliability-outbound-call-unguarded")]
+string PushTo(WebPushChannel channel, PushSubscription s, Notification n) {
+  var endpoint = Crypto.Decrypt(s.SealedEndpoint);
+  var headers = new Dictionary<string, string>();
+  headers.Add("Authorization", "vapid t=" + VapidToken(channel, OriginOf(endpoint)) + ", k=" + channel.PublicKey);
+  headers.Add("TTL", ((long)channel.TimeToLive.TotalSeconds).ToString());
+  headers.Add("Urgency", n.Mention ? "high" : "normal");
+  headers.Add("Topic", Crypto.Sha256Hex(n.Key).Substring(0, 32));
+  try {
+    var r = Http.Post(endpoint, "", "application/octet-stream", headers);
+    if (r.IsSuccess) {
+      s.LastPushedAt = DateTime.UtcNow;
+      s.Problem = null;
+      return "";
+    }
+    if (r.StatusCode == 404 || r.StatusCode == 410) {
+      // The browser unsubscribed, or the service expired it: nothing to try again.
+      s.Delete();
+      return "";
+    }
+    s.Problem = $"{s.Host} answered HTTP {r.StatusCode}.";
+  } catch (Exception ex) {
+    // The endpoint is a credential, and a transport error can quote it — said by its host only.
+    s.Problem = Clipped(s.Host + " did not answer: " + ex.Message.Replace(endpoint, s.Host), 300);
+  }
+  return s.Problem!;
+}
+
+/// The VAPID token for one push service (`aud`, its origin) — an ES256 JWT, valid 12 hours.
+string VapidToken(WebPushChannel channel, string audience) {
+  var expires = (long)(DateTime.UtcNow.AddHours(12) - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+  var header = Base64Url(Text.ToBytes("{\"typ\":\"JWT\",\"alg\":\"ES256\"}"));
+  var claims = Base64Url(Text.ToBytes("{\"aud\":" + JsonSerializer.Serialize(audience) + ",\"exp\":" + expires.ToString()
+                                      + ",\"sub\":" + JsonSerializer.Serialize(channel.Subject) + "}"));
+  var signature = Base64Url(Crypto.SignEs256(channel.PrivateKey, Text.ToBytes(header + "." + claims)));
+  return header + "." + claims + "." + signature;
+}
+
+string Base64Url(byte[] bytes) {
+  return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+}
+
+/// "https://fcm.googleapis.com" of "https://fcm.googleapis.com/fcm/send/…".
+string OriginOf(string url) {
+  var slash = url.IndexOf("/", 8);
+  return slash < 0 ? url : url.Substring(0, slash);
+}
+
+/// The kit's Web Push channel among the app's, when it has one that is ready.
+WebPushChannel? TheWebPush() {
+  foreach (var c in App.Setting<NotificationsSetup>().Channels) {
+    if (c is WebPushChannel && c.IsReady()) { return c as WebPushChannel; }
+  }
+  return null;
+}
+
+// ── what the browser calls ────────────────────────────────────────────────────────────────────────────────────────────
+
+/// The key a browser subscribes with (`pushManager.subscribe({ applicationServerKey })`) — "" when the app pushes
+/// nothing, so the page offers no "turn on notifications".
+public string PushPublicKey() {
+  var push = TheWebPush();
+  return push == null ? "" : push!.PublicKey;
+}
+
+/// The signed-in person allows this browser to notify them: its subscription's `endpoint` and `keys` (the
+/// `PushSubscription.toJSON()` a browser gives). The same browser again is the same subscription.
+public void SubscribeToPush(string endpoint, string p256dh = "", string auth = "") {
+  var me = Session.CurrentUser;
+  if (me == null) { return; }
+  var address = endpoint.Trim();
+  if (!address.StartsWith("https://") || address.Length > 2000 || address.IndexOf("/", 8) < 0) {
+    throw new ValidationException("A push subscription's endpoint is the https address its browser's push service gave it.");
+  }
+  var hash = Crypto.Sha256Hex(address);
+  if (!PushSubscription.Any(s => s.Person == me && s.EndpointHash == hash)) {
+    new PushSubscription { Person = me, EndpointHash = hash, SealedEndpoint = Crypto.Encrypt(address),
+                           SealedKeys = p256dh == "" ? "" : Crypto.Encrypt(p256dh + " " + auth),
+                           Host = OriginOf(address).Substring(8), At = DateTime.UtcNow };
+  }
+  UnitOfWork.Commit();
+}
+
+/// The signed-in person takes this browser off — as they turn notifications off in it, or sign out of it.
+public void UnsubscribeFromPush(string endpoint) {
+  var me = Session.CurrentUser;
+  if (me == null) { return; }
+  var hash = Crypto.Sha256Hex(endpoint.Trim());
+  foreach (var s in PushSubscription.Where(x => x.Person == me && x.EndpointHash == hash).ToList()) { s.Delete(); }
+  UnitOfWork.Commit();
+}
+
+/// The reader's unread notifications, newest first, said in their language — what a service worker shows when a push
+/// wakes it. Read as the reader, like the bell: one about a record they may no longer read is not among them.
+public List<NotificationLine> UnreadNotificationLines(int take = 5) {
+  var me = Session.CurrentUser;
+  if (me == null) { return []; }
+  RememberLanguage();
+  var unread = Notification.Where(n => n.Recipient == me && n.Visible && n.ReadAt == null).OrderByDescending(n => n.At)
+    .Take(take).ToList();
+  List<NotificationLine> said = [];
+  foreach (var n in unread) {
+    var line = LineOf(n);
+    if (line.Readable) { said.Add(line); }
+  }
+  UnitOfWork.Commit();
+  return said;
+}

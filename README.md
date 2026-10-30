@@ -42,9 +42,26 @@ NotificationBell();                                             // in the shell'
 | **One unread per thing** | a second notification with the same key joins the unread one ("2 times"), held by the database |
 | **The bell** | `NotificationBell()` — count in its accessible name, a panel wide, a sheet on a phone, empty and caught-up states designed |
 | **Mail** | per person, on their own settings page: mentions at once (after a short wait, only if still unread) and the rest daily; daily only; or nothing — always in their language |
+| **At once, on a phone** | Web Push to every browser a person allowed, as it reaches their bell — everything, mentions only, or nothing, their own choice; signed with the app's VAPID key, carrying nothing (the browser fetches the lines as its person); tried again while a push service is down, and every try asks again whether they may read it |
+| **Channels of your own** | `INotificationChannel` — a chat, a pager — named in `NotificationsSetup.Channels` beside Web Push, each send its own row and retried on its own |
 | **The event, not its sentence** | a notification keeps the event itself and says it with the event's own `Sentence()` when it is read — in the reader's language, with the event's records read as they may read them; an event that says nothing of its own says its label |
 | **Retention** | read ones after 30 days, unread after 180, never-shown after a day — an hourly sweep |
 | **Privacy** | the event it keeps is `Personal.Content`; with `Osysharp.Privacy`, Osysharp.Privacy.Notifications — which arrives by itself — counts, copies, restricts and erases a person's notifications and preferences |
+
+## Web Push
+
+```osy
+use Osysharp.Notifications@1 { egress "fcm.googleapis.com"; egress "updates.push.services.mozilla.com";
+                               egress "*.push.apple.com"; }                // the push services browsers name
+app.Secrets = [ new Secret("VapidKey") ];                                   // the VAPID private key, PEM
+app.Notifications = new NotificationsSetup { AppName = "Harbour", Channels = [
+  new WebPushChannel { PublicKey = "BKyBWg3t…", PrivateKey = Secret.VapidKey, Subject = "mailto:ops@harbour.example" } ] };
+```
+
+The page offers "notify me on this device" when `PushPublicKey()` is not empty, subscribes the browser with it and hands
+the subscription to `SubscribeToPush(endpoint, p256dh, auth)`; the app's service worker, woken by a push, shows
+`UnreadNotificationLines()` — asked as its person, so what appears is read under their own rules. The push itself says
+nothing about any record. The wire format, the browser's half and making a key pair: `osy docs ui-notifications-web-push`.
 
 ## Screens
 
@@ -130,37 +147,31 @@ From [`tests/mail.test.osy`](tests/mail.test.osy).
 
 ```osy
 using Osysharp.Identity;
+using Osysharp.Http;
+using Osysharp.Mail;
 using Osysharp.Notifications;
 using NotificationsKitTests;
 
 [Test(Studio)]
-void a_notification_about_a_record_the_recipient_may_not_read_is_never_shown() {
-  runas (Ada) {
-    AskForARead(DraftNamed("Salary memo"), PersonAt("bo@studio.test"));
-    // …and one Bo may read, so the settle below is shown to have delivered.
-    AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test"));
-  }
+void a_browser_its_push_service_says_is_gone_is_dropped() {
+  Http.Post.Stub((url, body, headers) => new HttpResponse { StatusCode = 410, Body = "" });
+  runas (Bo) { SubscribeToPush(BoPhone); }
+  runas (Ada) { AskForARead(DraftNamed("Spring issue"), PersonAt("bo@studio.test")); }
   Background.Settle();
   runas (Bo) {
-    Assert.Equal(1, UnreadNotifications());
-    var lines = MyNotificationLines();
-    Assert.Equal(1, lines.Count);
-    Assert.Equal("“Spring issue”", lines[0].Title);
-    Assert.False(lines.Any(l => l.Title.Contains("Salary")));
+    Assert.Equal(0, PushSubscription.Count());
+    Assert.Equal(NotificationSendState.Sent, NotificationSend.Single().State);
+    // Nobody else's: Cy cannot add a browser for Bo, nor see Bo's.
   }
-  // An editor may read a private draft, so the same notification about one reaches her. (Asked by its writer: a person
-  // cannot hand on a draft they cannot read themselves — the call is refused before it runs.)
   runas (Cy) {
-    new Draft { Title = "Pay review", Writer = PersonAt("cy@studio.test"), Private = true };
-    UnitOfWork.Commit();
+    var bo = PersonAt("bo@studio.test");
+    Assert.Denied(() => new PushSubscription { Person = bo, EndpointHash = "x", SealedEndpoint = "x", Host = "x" });
+    Assert.Equal(0, NotificationSend.Count());
   }
-  runas (Cy) { AskForARead(DraftNamed("Pay review"), PersonAt("ada@studio.test")); }
-  Background.Settle();
-  runas (Ada) { Assert.Equal("“Pay review”", MyNotificationLines().Single().Title); }
 }
 ```
 
-From [`tests/delivery.test.osy`](tests/delivery.test.osy).
+From [`tests/push.test.osy`](tests/push.test.osy).
 
 ## Learn more
 
