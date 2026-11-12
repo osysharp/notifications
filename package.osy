@@ -35,8 +35,8 @@
 // ⚑ THE APP SAYS ONE THING — who has a bell, and preferences:
 //     policy ReceivesNotifications => IsAgent;
 package Osysharp.Notifications {
-  version "1.3.0";
-  minPlatform "0.17.0";
+  version "1.4.0";
+  minPlatform "0.19.0";
   summary     "telling a person something needs them — a bell with a live count and a list (read and unread, mark all read), a push to their phone or browser at once (Web Push, VAPID) and a daily mail digest of what they have not seen or a mention mailed at once (their own choices, in their own language), delivered durably after the commit, deduplicated while unread, and never about a record the recipient may not read under their own security.";
   model "model/**/*.osy";
   // The personal data its own fields hold (`[Classification(Personal.X)]`): what happened, which can name people.

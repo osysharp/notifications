@@ -32,7 +32,9 @@ public enum NotificationPush {
 /// One browser a person allowed to notify them — its push subscription, made by `SubscribeToPush`.
 ///
 /// SECURITY-INVARIANT(push-subscriptions-are-their-persons-own): a person adds and removes only their own, and nobody —
-/// themselves included — reads the endpoint or its keys back: the kit's push is the only thing that opens them.
+/// themselves included — reads the endpoint or its keys back: the kit's push is the only thing that opens them. Guarded by
+/// tests/push.test.osy `a_push_subscription_receives_an_immediate_notification_and_not_one_it_may_not_read` (its owner reads
+/// back only the host, never the endpoint).
 [Unique(Person, EndpointHash)]
 public entity PushSubscription {
   /// Whose browser it is.
